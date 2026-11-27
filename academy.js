@@ -30,6 +30,10 @@
   const profileForm = $("#student-profile-form");
   const accountForm = $("#student-account-form");
   const accountStatus = $("#student-account-status");
+  const verificationPanel = $("#email-confirmation");
+  const verificationForm = $("#email-confirmation-form");
+  const verificationStatus = $("#email-confirmation-status");
+  const requestVerification = $("#request-email-verification");
   const passwordForm = $("#student-password-form");
   const passwordStatus = $("#student-password-status");
   const referralForm = $("#profile-referral-form");
@@ -95,6 +99,8 @@
     studentReferrals = referrals;
     studentOrders = orders;
     notice.textContent = feedback || (student ? `Hola, ${student.name}.` : "Entra para ver tus inscripciones y lecciones.");
+    if (student && account?.emailVerified === false && !feedback) notice.textContent += " Verifica tu correo en Mi perfil antes de inscribirte.";
+    renderEmailVerification(student, account);
     $("#student-access").hidden = Boolean(student);
     $("#student-logout").hidden = !student;
     $("#student-account").hidden = !student;
@@ -173,6 +179,70 @@
     accountStatus.textContent = "";
     updateEmailConfirmation();
   }
+
+  function verificationFromHash() {
+    const match = /^#verificar-(registro|correo)=([a-f0-9]{32})\.([a-f0-9]{64})$/.exec(location.hash);
+    return match && { signup: match[1] === "registro", id: match[2], token: match[3] };
+  }
+
+  function renderEmailVerification(student, account) {
+    const challenge = verificationFromHash();
+    verificationPanel.hidden = !challenge;
+    if (challenge) {
+      const passwordLabel = $("#email-registration-password");
+      passwordLabel.hidden = !challenge.signup;
+      verificationForm.elements.password.required = challenge.signup;
+      verificationForm.elements.password.disabled = !challenge.signup;
+      verificationForm.hidden = !challenge.signup && !student;
+      $("#email-confirmation-help").textContent = challenge.signup
+        ? "Introduce la contraseña que elegiste para completar tu registro."
+        : student ? "Confirma el correo solicitado para tu cuenta." : "Inicia sesión con tu correo actual para poder confirmar el cambio.";
+    }
+    const emailNotice = $("#student-email-notice");
+    emailNotice.hidden = !student || (!account?.emailVerificationPending && account?.emailVerified !== false);
+    emailNotice.textContent = account?.emailVerificationPending ? "Hay una verificación de correo pendiente de confirmación."
+      : "Tu correo todavía no está verificado. Podrás inscribirte después de confirmarlo.";
+    requestVerification.hidden = !student || account?.emailVerified !== false;
+  }
+
+  verificationForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const challenge = verificationFromHash();
+    const button = verificationForm.querySelector("button");
+    if (!challenge || button.disabled) return;
+    const hash = location.hash;
+    const previous = studentEmail;
+    button.disabled = true;
+    verificationStatus.textContent = "Confirmando…";
+    try {
+      const { signup, id, token } = challenge;
+      const password = verificationForm.elements.password.value;
+      const data = await request(signup ? "/register/verify" : "/account/verify", { id, token, ...(signup && { password }) });
+      if (location.hash === hash) history.replaceState(history.state, "", "#perfil");
+      if (previous) window.ivannaApp.updateEmail(previous, data.student.email);
+      verificationForm.reset();
+      profilePanel.open = true;
+      render(data, signup ? "Correo confirmado. Tu cuenta está lista." : "Correo confirmado. Los próximos avisos se enviarán a esta dirección.");
+    } catch (error) {
+      verificationStatus.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  requestVerification.addEventListener("click", async () => {
+    if (requestVerification.disabled) return;
+    requestVerification.disabled = true;
+    try {
+      const data = await request("/account/verify/request", {});
+      render(data, "Revisa el mensaje que te enviamos para confirmar tu correo.");
+      accountStatus.textContent = "Enlace solicitado. Revisa también el correo no deseado.";
+    } catch (error) {
+      accountStatus.textContent = error.message;
+    } finally {
+      requestVerification.disabled = false;
+    }
+  });
 
   function setPasswordVisibility() {
     const show = passwordForm.elements.showPasswords.checked;
@@ -271,7 +341,8 @@
         form.reset();
         setPasswordVisibility();
       }
-      status.textContent = successMessage;
+      status.textContent = form === accountForm && data.account?.emailVerificationPending
+        ? "Abre el enlace que te enviamos al correo nuevo. Tu dirección actual se mantiene hasta confirmarlo." : successMessage;
     } catch (error) {
       if (studentEmail === owner) status.textContent = error.message;
     } finally {
@@ -307,6 +378,7 @@
     window.academyFeed.setAvatar(profile?.avatar);
     clearPhotoPreview();
     profileForm.reset();
+    profileForm.elements.visibility.value = profile?.visibility || "public";
     profileForm.elements.specialty.value = profile?.specialty || "";
     for (const { key, handle } of profile?.socials || []) profileForm.elements.namedItem(key).value = handle;
     for (const image of [profileAvatar, $("#profile-summary-avatar"), $("#student-account-avatar")]) setAvatar(image, profile?.avatar);
@@ -344,7 +416,7 @@
     const button = $("#save-student-profile");
     if (!owner || button.disabled) return;
     const data = new FormData(profileForm);
-    const controls = [...profileForm.querySelectorAll("button, input")];
+    const controls = [...profileForm.querySelectorAll("button, input, select")];
     for (const control of controls) control.disabled = true;
     profileStatus.textContent = "Guardando el perfil…";
     try {

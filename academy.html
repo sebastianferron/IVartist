@@ -47,6 +47,17 @@
         <h1>Mi espacio</h1>
         <p id="academy-message" role="status">Cargando tu espacio…</p>
       </div>
+      <section class="academy-panel" id="email-confirmation" aria-labelledby="email-confirmation-title" hidden>
+        <h2 id="email-confirmation-title">Confirma tu correo</h2>
+        <p id="email-confirmation-help"></p>
+        <form id="email-confirmation-form" method="post" aria-describedby="email-confirmation-help">
+          <label id="email-registration-password">Contraseña que elegiste al registrarte
+            <input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="128" />
+          </label>
+          <button class="admin-primary" type="submit">Confirmar correo</button>
+        </form>
+        <p role="status" id="email-confirmation-status"></p>
+      </section>
       <details class="academy-panel profile-editor" id="perfil" hidden>
         <summary><img class="profile-avatar" id="profile-summary-avatar" src="/assets/avatar-generico.svg" alt="" /> Mi perfil</summary>
         <form id="student-account-form" class="profile-editor__account" method="post" action="/api/academy/account" aria-labelledby="student-account-title">
@@ -69,6 +80,8 @@
           <button class="admin-primary" type="submit">Guardar mis datos</button>
           <p class="profile-editor__status" id="student-account-status" role="status"></p>
         </form>
+        <p class="profile-editor__status" id="student-email-notice" hidden></p>
+        <button class="admin-secondary" id="request-email-verification" type="button" hidden>Enviar enlace de verificación</button>
         <details class="profile-editor__password" id="profile-password">
           <summary>Cambiar contraseña</summary>
           <form id="student-password-form" method="post" action="/api/academy/account/password">
@@ -109,8 +122,14 @@
           <p id="profile-referrals-status" class="profile-editor__status" role="status"></p>
         </section>
         <form id="student-profile-form" method="post" action="/api/academy/profile" enctype="multipart/form-data">
-          <h3>Perfil público</h3>
-          <p class="profile-editor__note">Tu perfil público muestra tu nombre, especialidad, foto y redes sociales.</p>
+          <h3>Visibilidad del perfil</h3>
+          <p class="profile-editor__note" id="profile-visibility-help">Si dejas tu perfil privado, tus publicaciones y reseñas siguen mostrando tu primer nombre. Tu foto, especialidad y redes se ocultan.</p>
+          <label>Quién puede ver tu perfil
+            <select name="visibility" aria-describedby="profile-visibility-help">
+              <option value="public">Cualquiera</option>
+              <option value="private">Solo yo</option>
+            </select>
+          </label>
           <label>Especialidad
             <input type="text" name="specialty" maxlength="100" placeholder="Ej. Maquillaje editorial y artístico" />
           </label>

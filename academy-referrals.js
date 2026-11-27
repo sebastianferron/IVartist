@@ -77,13 +77,13 @@ function createReferrals({ getState, RequestError }) {
   function welcomeDiscount(student, order) {
     if (!student.invitation || student.demo || order?.demo) return null;
     const otherOrders = getState().orders.filter((item) => item.studentId === student.id && item.id !== order?.id && !item.demo);
-    if (otherOrders.some((item) => item.status === "approved" || item.discount?.kind === "invite")) return null;
+    if (otherOrders.some((item) => item.status === "approved" || (item.status !== "cancelled" && item.discount?.kind === "invite"))) return null;
     return { kind: "invite", percent: student.invitation.buyerPercent };
   }
 
   function rewards(studentId) {
     const orders = getState().orders;
-    const used = new Set(orders.filter((order) => order.studentId === studentId && order.discount?.kind === "reward")
+    const used = new Set(orders.filter((order) => order.studentId === studentId && order.status !== "cancelled" && order.discount?.kind === "reward")
       .map((order) => order.discount.rewardId));
     return orders.filter((order) => order.referralReward?.studentId === studentId && order.status === "approved" && !used.has(order.id))
       .map((order) => ({ kind: "reward", rewardId: order.id, percent: order.referralReward.percent }))
@@ -96,6 +96,18 @@ function createReferrals({ getState, RequestError }) {
     if (order.demo || order.status !== "approved" || buyer?.demo || !buyer?.invitation) return null;
     if (state.orders.some((item) => item.id !== order.id && item.studentId === buyer.id && item.status === "approved" && !item.demo)) return null;
     return { studentId: buyer.invitation.referrerId, percent: buyer.invitation.referrerPercent };
+  }
+
+  function checkApproval(order) {
+    const otherOrders = getState().orders.filter((item) =>
+      item.id !== order.id && item.studentId === order.studentId && !item.demo);
+    if (order.discount?.kind === "invite") {
+      if (otherOrders.some((item) => item.status === "approved")) {
+        throw new RequestError(409, "El descuento de bienvenida solo se admite en la primera compra. Concilia el importe con la estudiante antes de continuar.");
+      }
+    } else if (otherOrders.some((item) => item.status === "submitted" && item.discount?.kind === "invite")) {
+      throw new RequestError(409, "Revisa primero el comprobante de la inscripción con descuento de bienvenida.");
+    }
   }
 
   function discountedAmount(cents, discount) {
@@ -125,7 +137,7 @@ function createReferrals({ getState, RequestError }) {
       if (!promo.enabled || !codePattern.test(code) || code !== promo.code) throw new RequestError(400, "El código promocional no es válido o está inactivo.");
       selection = { kind: "promo", code, percent: promo.percent };
     } else if (input?.kind === "invite") {
-      selection = order.discount?.kind === "invite" ? order.discount : welcomeDiscount(student, order);
+      selection = welcomeDiscount(student, order);
     } else if (input?.kind === "reward" && !order.demo) {
       selection = order.discount?.kind === "reward" ? order.discount : rewards(student.id)[0];
     }
@@ -150,7 +162,7 @@ function createReferrals({ getState, RequestError }) {
       }),
     };
   }
-  return { settings, validate, invitation, newQuote, changeDiscount, newReward, member, checkCode, updateCode };
+  return { settings, validate, invitation, newQuote, changeDiscount, checkApproval, newReward, member, checkCode, updateCode };
 }
 
 module.exports = { createReferrals };

@@ -4,6 +4,7 @@
     "build": "node cloudflare/build-pages.mjs",
     "worker:check": "wrangler deploy --config cloudflare/wrangler.worker.jsonc --dry-run --outdir dist-worker"
   },
+  "engines": { "node": ">=22.13.0" },
   "dependencies": {
     "web-push": "^4.0.0"
   },

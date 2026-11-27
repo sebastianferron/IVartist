@@ -27,7 +27,9 @@
   let category = "course";
   let selection = null;
   let editorData;
-  let orderSignature = "";
+  let paymentsPage = 1;
+  let activeView;
+  let polling = false;
   let reviewSignature = "";
   let commentSignature = "";
   let qr = "";
@@ -253,19 +255,23 @@
   function render(data) {
     editorData = data;
     renderCatalog();
-    $("#academy-month").textContent = currency.format(data.metrics.monthCents / 100);
-    $("#academy-student-count").textContent = data.metrics.students;
-    $("#academy-approved-count").textContent = data.metrics.approved;
-    $("#academy-pending-count").textContent = data.metrics.pending;
+    renderMetrics(data.metrics);
     refresh.hidden = false;
     $("#academy-email-configuration").textContent = data.paymentEmailConfigured
       ? "Resend configurado. Revisión de pagos muestra el estado de los avisos por correo."
       : "Por conectar. Configura el remitente y la clave de Resend en el servidor. Los correos pendientes se guardan en la cola.";
-    renderRevenue(data.metrics.revenue);
     renderStudents(data.students);
     renderOrders(data.orders);
     renderReviews(data.reviews);
     renderCourseComments(data.courseComments || []);
+  }
+
+  function renderMetrics(metrics) {
+    $("#academy-month").textContent = currency.format(metrics.monthCents / 100);
+    $("#academy-student-count").textContent = metrics.students;
+    $("#academy-approved-count").textContent = metrics.approved;
+    $("#academy-pending-count").textContent = metrics.pending;
+    renderRevenue(metrics.revenue);
   }
 
   function make(tag, text, className) {
@@ -317,16 +323,22 @@
     }));
   }
 
-  const orderVersion = (orders) => JSON.stringify(orders.map(({ id, status, submissionId, receipt, emailStatus, whatsappStatus }) => [id, status, submissionId || receipt, emailStatus, whatsappStatus]));
   const linkedPayment = new URLSearchParams(location.search).get("payment");
 
   function renderOrders(orders) {
-    orderSignature = orderVersion(orders);
     const labels = { awaiting_receipt: "Inscripción iniciada", submitted: "Verificando comprobante", approved: "Pago aprobado y acceso habilitado", rejected: "Comprobante rechazado" };
     const emailLabels = { queued: "En cola", sent: "Enviado al proveedor", failed: "Falló el envío", unconfigured: "Pendiente de configuración" };
     const sorted = [...orders].sort((a, b) => Number(b.id === linkedPayment) - Number(a.id === linkedPayment)
       || Number(b.status === "submitted") - Number(a.status === "submitted"));
-    const cards = sorted.map((order) => {
+    const pageSize = 20;
+    const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
+    paymentsPage = Math.min(paymentsPage, pages);
+    $("#academy-payments-pagination").hidden = pages < 2;
+    $("#academy-payments-previous").disabled = paymentsPage <= 1;
+    $("#academy-payments-next").disabled = paymentsPage >= pages;
+    $("#academy-payments-page").textContent = `Página ${paymentsPage} de ${pages}`;
+    const start = (paymentsPage - 1) * pageSize;
+    const cards = sorted.slice(start, start + pageSize).map((order) => {
       const card = make("article", "", "academy-order-review");
       card.id = `pago-${order.id}`;
       if (order.id === linkedPayment) card.classList.add("academy-order-review--linked");
@@ -339,6 +351,7 @@
         ["WhatsApp", order.student?.whatsapp || ""],
         [order.demo ? "Monto de prueba" : order.status === "approved" ? "Monto confirmado" : "Monto a verificar", currency.format(order.cents / 100)],
       ];
+      if (order.bankReference) details.push(["Referencia bancaria", order.bankReference]);
       if (order.discount) {
         const names = { promo: "Código promocional", invite: "Invitación", reward: "Premio por invitación" };
         details.push(["Precio original", currency.format(order.baseCents / 100)],
@@ -351,7 +364,8 @@
         file.href = `/api/admin/academy/orders/${order.id}/receipt`;
         card.append(file);
       } else card.append(make("p", "Aviso de pago sin comprobante adjunto."));
-      const whatsappLabels = { queued: "En cola", attached: "Enviado con comprobante", link: "Enviado con enlace al comprobante", failed: "Falló el envío", skipped: "Aviso omitido" };
+      const whatsappLabels = { queued: "En cola", attached: "Enviado con comprobante", link: "Enviado con enlace al comprobante", failed: "Falló el envío", skipped: "Aviso omitido",
+        unknown: "Resultado sin confirmar. Revisa WhatsApp." };
       if (order.whatsappStatus) card.append(make("p", `WhatsApp · ${whatsappLabels[order.whatsappStatus]}`, "academy-status"));
       if (order.note) card.append(make("p", order.note, "academy-prose"));
       const process = make("details", "", "academy-order-process");
@@ -374,6 +388,16 @@
       if (order.status !== "submitted") return card;
 
       const review = make("form");
+      const reference = make("input");
+      reference.type = "text";
+      reference.maxLength = 80;
+      reference.autocomplete = "off";
+      reference.spellcheck = false;
+      if (!order.demo) {
+        const bank = make("label", "Referencia de la operación verificada en el banco");
+        bank.append(reference);
+        review.append(bank);
+      }
       const label = make("label", "Motivo, si rechazas el comprobante");
       const note = make("textarea");
       note.rows = 2;
@@ -393,6 +417,11 @@
         if (review.dataset.busy) return;
         const decision = event.submitter?.value;
         if (!decision) return;
+        if (decision === "approved" && !order.demo && !reference.value.trim()) {
+          paymentsStatus.textContent = "Ingresa la referencia de la operación tal como aparece en el banco.";
+          reference.focus();
+          return;
+        }
         if (decision === "rejected" && !note.value.trim()) {
           paymentsStatus.textContent = "Escribe el motivo antes de rechazar el comprobante.";
           note.focus();
@@ -401,7 +430,8 @@
         review.dataset.busy = "true";
         for (const button of actions.children) button.disabled = true;
         try {
-          render(await request(`/orders/${order.id}`, "PUT", { decision, note: note.value, receipt: order.receipt, submissionId: order.submissionId }));
+          render(await request(`/orders/${order.id}`, "PUT", { decision, note: note.value, receipt: order.receipt,
+            submissionId: order.submissionId, bankReference: reference.value }));
           paymentsStatus.textContent = decision === "approved" ? "Pago aprobado. El acceso ya aparece en Mi espacio." : "Pago rechazado. El estudiante puede enviar otro aviso.";
         } catch (error) {
           paymentsStatus.textContent = error.message;
@@ -415,6 +445,13 @@
     });
     if (!cards.length) cards.push(make("p", "Los avisos de «Ya pagué» aparecerán aquí."));
     $("#academy-order-list").replaceChildren(...cards);
+  }
+
+  for (const [selector, step] of [["#academy-payments-previous", -1], ["#academy-payments-next", 1]]) {
+    $(selector).addEventListener("click", () => {
+      paymentsPage += step;
+      renderOrders(editorData.orders);
+    });
   }
 
   const reviewVersion = (reviews) => JSON.stringify(reviews.map(({ id, revision }) => [id, revision]));
@@ -472,6 +509,9 @@
     const card = make("details", "", "academy-order-review academy-review-editor");
     const status = `${review.status === "pending" ? "Pendiente" : "Publicada"}${review.demo ? " · Demo" : ""}`;
     card.append(make("summary", `${status} · ${review.course} · ${review.name} · ${review.rating}/5`));
+    if (review.progressSource === "self-reported") {
+      card.append(make("p", "Finalización registrada por el reproductor de la participante."));
+    }
     const editor = make("form");
     const name = make("input");
     name.value = review.name;
@@ -863,6 +903,7 @@
         else field.value = value;
       }
       config.querySelector('[type="password"]').value = "";
+      if (config.elements.confirmDelivery) config.elements.confirmDelivery.checked = false;
       $(`#${name}-secret-status`).textContent = secretSaved(settings) ? "Guardada. Deja este campo vacío para conservarla." : "";
       loaded = true;
     }
@@ -894,7 +935,7 @@
 
   setupIntegration("waha", ({ elements }) => ({
     ...Object.fromEntries(["address", "apiKey", "session", "recipient", "siteUrl"].map((key) => [key, elements[key].value])),
-    enabled: elements.enabled.checked, attachReceipt: elements.attachReceipt.checked,
+    enabled: elements.enabled.checked, attachReceipt: elements.attachReceipt.checked, confirmDelivery: elements.confirmDelivery.checked,
   }), (settings) => settings.keySaved, ({ status }) => `Sesión de WhatsApp · ${status}`);
   setupIntegration("plugnmeet", (config) => {
     const { elements } = config;
@@ -908,6 +949,7 @@
   }, (settings) => settings.secretSaved, () => "Conexión con PlugNmeet confirmada.");
 
   document.addEventListener("dashboard:view", ({ detail }) => {
+    activeView = detail;
     if (detail === "academy-feed-admin") loadModeration();
     if (detail === "academy-news") request("/news").then(showNews).catch((error) => { newsStatus.textContent = error.message; });
     if (detail === "academy-referrals" && saveReferral.disabled) {
@@ -954,18 +996,40 @@
     render(data);
     paymentsStatus.textContent = "";
     window.setInterval(async () => {
-      const list = $("#academy-order-list");
+      const sections = {
+        "academy-payments": ["payments", $("#academy-order-list")],
+        "resumen": ["summary"],
+        "academy-students": ["students", $("#academy-student-list")],
+        "academy-reviews": ["reviews", reviewList],
+        "academy-comments": ["comments", commentList],
+      };
+      const currentView = () => activeView || document.querySelector("[data-dashboard-view]:not([hidden])")?.id;
+      const view = currentView();
+      const context = sections[view];
+      if (!context || polling || document.hidden || busy) return;
+      const [section, list] = context;
       const previous = editorData;
-      const editing = () => [list, reviewList, commentList].some((area) => area.contains(document.activeElement) || area.querySelector("[data-busy]"));
-      if (document.hidden || busy || editing()) return;
+      const editing = () => list?.contains(document.activeElement) || list?.querySelector("[data-busy]")
+        || (section === "payments" && [...list.querySelectorAll("textarea, input[name=bankReference]")].some((input) => input.value.trim()));
+      const stale = () => previous !== editorData || editing() || view !== currentView() || document.hidden;
+      if (stale()) return;
+      polling = true;
       try {
-        const next = await request("");
-        const signature = orderVersion(next.orders);
-        if (previous === editorData && !editing() && (signature !== orderSignature || reviewVersion(next.reviews) !== reviewSignature || reviewVersion(next.courseComments || []) !== commentSignature)) {
-          render(next);
+        const { token } = await request(`/changes?section=${section}`);
+        if (token === previous.changeTokens?.[section] || stale()) return;
+        const next = await request(`/section?section=${section}`);
+        if (stale()) return;
+        editorData = { ...previous, ...next, changeTokens: { ...previous.changeTokens, ...next.changeTokens } };
+        if (section === "payments") {
+          renderMetrics(next.metrics);
+          renderOrders(next.orders);
           paymentsStatus.textContent = next.metrics.pending ? `Pagos por revisar: ${next.metrics.pending}.` : "No hay pagos por revisar.";
-        }
-      } catch { /* El botón Actualizar pagos permite reintentar. */ }
+        } else if (section === "summary") renderMetrics(next.metrics);
+        else if (section === "students") renderStudents(next.students);
+        else if (section === "reviews") renderReviews(next.reviews);
+        else renderCourseComments(next.courseComments);
+      } catch { /* La acción de actualizar permite reintentar. */ }
+      finally { polling = false; }
     }, 15000);
   }).catch((error) => {
     catalogStatus.textContent = error.message;

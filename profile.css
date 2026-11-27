@@ -57,6 +57,16 @@
 .profile-editor__password .profile-editor__password-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .profile-editor__password-toggle input { width: auto; min-height: 0; accent-color: #f1b5ce; }
 #student-profile-form { border-top: 1px solid #c697ae5e; padding-top: 18px; }
+#student-profile-form select {
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  color: #fff2f6;
+  background: #21131e;
+  border: 1px solid #a5778e;
+  border-radius: 4px;
+  font: inherit;
+}
+#student-profile-form select:focus-visible { outline: 2px solid #f6bfd2; outline-offset: 2px; }
 .profile-referrals { width: 100%; margin-top: 18px; padding: 16px; border: 1px solid #b985a16b; border-radius: 10px; background: #251623; scroll-margin-top: 12px; }
 .profile-referrals h3 { margin-bottom: 5px; }
 .profile-referrals p { margin-block: 4px; }

@@ -254,6 +254,11 @@
           <p id="academy-payments-status" class="feedback" role="status">Cargando avisos de pago…</p>
           <button class="admin-secondary" id="academy-reload-payments" type="button" hidden>Actualizar pagos</button>
           <div id="academy-order-list" class="academy-order-list"></div>
+          <nav class="academy-admin-actions" id="academy-payments-pagination" aria-label="Páginas de pagos" hidden>
+            <button class="admin-secondary" type="button" id="academy-payments-previous">Anterior</button>
+            <span id="academy-payments-page" role="status"></span>
+            <button class="admin-secondary" type="button" id="academy-payments-next">Siguiente</button>
+          </nav>
         </section>
 
         <section id="finanzas" class="editor-section finance" data-dashboard-view aria-labelledby="finance-title" hidden>
@@ -471,6 +476,7 @@
                 <label>WhatsApp de revisión <input name="recipient" type="tel" maxlength="35" placeholder="+591 70000000" /></label>
                 <label class="wide-field">URL pública del sitio <input name="siteUrl" type="url" maxlength="400" placeholder="https://tudominio.com" /></label>
                 <label class="academy-news-push wide-field"><input name="attachReceipt" type="checkbox" /> Adjuntar también el comprobante al mensaje</label>
+                <label class="academy-news-push wide-field"><input name="confirmDelivery" type="checkbox" /> Confirmo el destino y el envío de copias si activo los adjuntos.</label>
               </div>
             </fieldset>
             <div class="academy-admin-actions">

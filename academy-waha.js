@@ -3,7 +3,8 @@
 const { sendHttps, webUrl } = require("./academy-provider-https");
 const { normalizeWhatsAppNumber } = require("./home-config");
 
-const defaults = { enabled: false, address: "", apiKey: "", session: "default", recipient: "", siteUrl: "", attachReceipt: true };
+const defaults = { enabled: false, address: "", apiKey: "", session: "default", recipient: "", siteUrl: "", attachReceipt: false };
+const deliverAttachments = (config) => config.attachReceipt === true && config.attachmentsConfirmed === true;
 const currency = new Intl.NumberFormat("es-BO", { style: "currency", currency: "BOB" });
 const attachmentUnavailable = new Set([404, 405, 413, 415, 422, 501]);
 
@@ -11,8 +12,9 @@ function createWaha({ getSettings, RequestError, requireText, id, publicOrigin, 
   const settings = () => getSettings() || defaults;
 
   function view() {
-    const { apiKey, destinationId, ...fields } = settings();
-    return { ...fields, siteUrl: fields.siteUrl || publicOrigin || "", keySaved: Boolean(apiKey) };
+    const config = settings();
+    const { apiKey, destinationId, attachmentsConfirmed, ...fields } = config;
+    return { ...fields, siteUrl: publicOrigin || fields.siteUrl || "", keySaved: Boolean(apiKey), attachReceipt: deliverAttachments(config) };
   }
 
   function validate(input) {
@@ -24,6 +26,9 @@ function createWaha({ getSettings, RequestError, requireText, id, publicOrigin, 
     const cleanSite = webUrl(input.siteUrl || publicOrigin, "URL pública del sitio", { requireText, RequestError });
     if (cleanSite && new URL(cleanSite).pathname !== "/") throw new RequestError(400, "Indica la URL pública del sitio sin rutas.");
     const siteUrl = cleanSite ? new URL(cleanSite).origin : "";
+    if (publicOrigin && siteUrl !== publicOrigin) {
+      throw new RequestError(400, "El enlace de revisión debe usar el origen público configurado para el sitio.");
+    }
     const session = requireText(input.session ?? defaults.session, 64, "Sesión", true);
     if (!/^[a-z0-9_-]+$/i.test(session)) throw new RequestError(400, "Usa letras, números, guiones o guiones bajos en la sesión.");
     const phone = requireText(input.recipient ?? "", 35, "WhatsApp de revisión");
@@ -37,8 +42,19 @@ function createWaha({ getSettings, RequestError, requireText, id, publicOrigin, 
     if (input.enabled && (!address || !apiKey || !recipient || !siteUrl)) {
       throw new RequestError(400, "Completa la URL de WAHA, la API key, el WhatsApp de revisión y la URL pública del sitio.");
     }
-    const sameDestination = address === previous.address && session === previous.session && recipient === previous.recipient;
-    return { enabled: input.enabled, address, apiKey, session, recipient, siteUrl, attachReceipt: input.attachReceipt, destinationId: sameDestination && previous.destinationId || id() };
+    const sameDestination = address === previous.address && session === previous.session &&
+      recipient === previous.recipient && siteUrl === previous.siteUrl && apiKey === previous.apiKey;
+    const attachmentsEnabled = deliverAttachments(previous);
+    if (((input.enabled && (!previous.enabled || !sameDestination)) ||
+        (input.attachReceipt && !attachmentsEnabled)) && input.confirmDelivery !== true) {
+      throw new RequestError(400, "Confirma el destino de los avisos y si se enviarán copias de los comprobantes.");
+    }
+    const unchangedDelivery = sameDestination && input.attachReceipt === attachmentsEnabled;
+    return {
+      enabled: input.enabled, address, apiKey, session, recipient, siteUrl, attachReceipt: input.attachReceipt,
+      attachmentsConfirmed: input.attachReceipt && (attachmentsEnabled || input.confirmDelivery === true),
+      destinationId: unchangedDelivery && previous.destinationId || id(),
+    };
   }
 
   async function api(config, route, payload) {
@@ -67,29 +83,35 @@ function createWaha({ getSettings, RequestError, requireText, id, publicOrigin, 
     return { connected: result.status === "WORKING", status: states[result.status] || "Sin conexión" };
   }
 
-  async function notify(config, order, student, file) {
+  async function notify(config, order, file) {
+    function rejected(status, message) {
+      const error = new RequestError(502, message);
+      error.deliveryRejected = [400, 401, 403, 404, 405, 413, 415, 422, 429, 501].includes(status);
+      return error;
+    }
     const destination = { session: config.session, chatId: `${config.recipient.slice(1)}@c.us` };
-    const link = `${config.siteUrl}/admin/dashboard?payment=${order.id}#academy-payments`;
+    const link = new URL("/admin/dashboard", publicOrigin || config.siteUrl);
+    link.searchParams.set("payment", order.id);
+    link.hash = "academy-payments";
     const safeLine = (value) => (value || "").replace(/\s+/g, " ").trim();
     const text = [
       "Pago pendiente de revisión",
-      `Estudiante: ${safeLine(student?.name) || "Participante"}`,
       `Curso: ${safeLine(order.title)}`,
       `Monto a verificar: ${currency.format(order.cents / 100)}`,
       `Revisar pago: ${link}`,
     ].join("\n");
-    if (config.attachReceipt && file) {
+    if (deliverAttachments(config) && file) {
       const { status } = await api(config, "sendFile", { ...destination, caption: text, file });
       if (status >= 200 && status < 300) return "attached";
-      if (!attachmentUnavailable.has(status)) throw new RequestError(502, "WAHA no pudo enviar el comprobante.");
+      if (!attachmentUnavailable.has(status)) throw rejected(status, "WAHA no pudo enviar el comprobante.");
       if (settings() !== config) throw new RequestError(409, "La conexión cambió durante el envío.");
     }
     const { status } = await api(config, "sendText", { ...destination, text });
-    if (status < 200 || status >= 300) throw new RequestError(502, "WAHA no pudo enviar el aviso de pago.");
+    if (status < 200 || status >= 300) throw rejected(status, "WAHA no pudo enviar el aviso de pago.");
     return "link";
   }
 
-  return { settings, view, validate, testConnection, notify };
+  return { settings, view, validate, testConnection, notify, deliverAttachments };
 }
 
 module.exports = { createWaha };

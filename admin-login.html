@@ -29,6 +29,10 @@
           <label>Contraseña
             <input name="password" type="password" autocomplete="current-password" maxlength="128" required />
           </label>
+          <label>Código de la aplicación de autenticación
+            <input name="totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" aria-describedby="login-totp-help" />
+          </label>
+          <p id="login-totp-help">Complétalo si tu cuenta usa verificación en dos pasos.</p>
           <button class="admin-primary" type="submit">Entrar al panel <span aria-hidden="true">↗</span></button>
           <p class="feedback" id="login-status" role="status" aria-live="polite"></p>
         </form>

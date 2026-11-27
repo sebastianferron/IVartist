@@ -105,6 +105,7 @@
       </button>
     </aside>
 
+    <p class="home-status" id="home-status" role="status" hidden></p>
     <main id="contenido">
       <section class="hero" id="inicio" aria-labelledby="hero-title">
         <div class="hero__media" id="hero-media" data-photo="editorial" aria-hidden="true">
@@ -307,7 +308,10 @@
       </section>
 
       <section class="social-clips" id="clips" aria-labelledby="social-clips-title" hidden>
-        <h2 id="social-clips-title" data-copy="socialClipsTitle">Clips de redes</h2>
+        <div class="social-clips__header">
+          <h2 id="social-clips-title" data-copy="socialClipsTitle">Clips de redes</h2>
+          <button class="social-clips__motion" id="social-clips-motion" type="button" aria-pressed="false" aria-controls="social-clips-viewport" hidden>Pausar movimiento</button>
+        </div>
         <div class="social-clips__rail" id="social-clips-rail">
           <div class="social-clips__viewport" id="social-clips-viewport">
             <div class="social-clips__track" id="social-clips-track"></div>

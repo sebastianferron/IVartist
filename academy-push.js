@@ -46,15 +46,20 @@ function createPush(dataDir, { readJsonFile, writeJsonFile, sendPush = webpush.s
   }
 
   async function deliver(recipients, message, removeExpired) {
+    const retry = [];
     for (let index = 0; index < recipients.length; index += 8) {
       await Promise.all(recipients.slice(index, index + 8).map(async (recipient) => {
         try { await send(recipient.subscription, message); }
         catch (error) {
           if ([404, 410].includes(error.statusCode)) removeExpired(recipient);
-          else console.warn("No se pudo entregar un aviso web.", error.statusCode || error.code || "error");
+          else {
+            console.warn("No se pudo entregar un aviso web.", error.statusCode || error.code || "error");
+            if (!error.statusCode || error.statusCode === 429 || error.statusCode >= 500) retry.push(recipient);
+          }
         }
       }));
     }
+    return retry;
   }
 
   return { publicKey: () => configuration().publicKey, deliver };

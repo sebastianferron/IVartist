@@ -6,8 +6,85 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { once } = require("node:events");
-const { createAdmin, createServer } = require("./server");
+const { Readable } = require("node:stream");
+const { createAdmin, createApplication, createServer } = require("./server");
 const { defaults } = require("./home-config");
+
+test("el límite del panel no bloquea a operadores de otra conexión", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ivanna-admin-limit-test-"));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const credentials = { username: "admin-limite", password: "Clave larga para límites" };
+  assert.throws(() => createAdmin(credentials.username, "contraseña", dataDir), /14 y 128/);
+  createAdmin(credentials.username, credentials.password, dataDir);
+  const app = createApplication({ dataDir });
+  const login = async (remoteAddress, password, username = credentials.username) => {
+    const body = Buffer.from(JSON.stringify({ username, password }));
+    const req = Readable.from([body]);
+    Object.assign(req, { method: "POST", url: "/api/admin/login", socket: { remoteAddress }, headers: {
+      host: "localhost", origin: "http://localhost", "content-type": "application/json",
+    } });
+    let status;
+    const res = { setHeader() {}, writeHead(code) { status = code; }, end() {} };
+    await app.handle(req, res);
+    return status;
+  };
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    assert.equal(await login("192.0.2.10", "Entrada de prueba", `cuenta-${attempt}`), 401);
+  }
+  assert.equal(await login("192.0.2.10", credentials.password), 429);
+  assert.equal(await login("192.0.2.20", credentials.password), 200);
+});
+
+test("la titularidad del correo se confirma antes del alta y de cambiar el correo activo", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ivanna-verify-test-"));
+  const emails = [];
+  const server = createServer({ dataDir, sendAccountEmail: async (email) => { emails.push(email); } }).listen(0, "127.0.0.1");
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+  await once(server, "listening");
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const send = (route, data, cookie = "", method = "POST") => fetch(`${origin}/api/academy${route}`, {
+    method, headers: { Origin: origin, Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const credentials = {
+    name: "Estudiante de prueba", email: "registro@example.test", password: "La contraseña inicial de prueba",
+    country: "BO", department: "Santa Cruz", age: "24", whatsapp: "70000000", interest: "Maquillaje profesional",
+  };
+  const requested = await send("/register", credentials);
+  assert.equal(requested.status, 202);
+  assert.equal(requested.headers.get("Set-Cookie"), null);
+  assert.equal((await send("/login", credentials)).status, 401);
+  assert.equal(emails[0]?.email, credentials.email);
+  const challenge = (fragment) => {
+    const [, id, token] = fragment.match(/=([a-f0-9]{32})\.([a-f0-9]{64})$/);
+    return { id, token };
+  };
+  const signup = challenge(emails[0].fragment);
+  assert.equal((await send("/register/verify", { ...signup, password: "Una contraseña diferente" })).status, 401);
+  const activated = await send("/register/verify", { ...signup, password: credentials.password });
+  assert.equal(activated.status, 201);
+  assert.equal((await activated.json()).account.emailVerified, true);
+  const cookie = activated.headers.get("Set-Cookie").split(";")[0];
+  assert.equal((await send("/register/verify", { ...signup, password: credentials.password })).status, 400);
+
+  const email = "correo-nuevo@example.test";
+  const pending = await send("/account", { name: credentials.name, email, whatsapp: "+59170000000", currentPassword: credentials.password }, cookie, "PUT");
+  assert.equal(pending.status, 202);
+  assert.equal((await pending.json()).student.email, credentials.email);
+  assert.equal((await send("/login", { ...credentials, email })).status, 401);
+  const change = challenge(emails.find((item) => item.email === email).fragment);
+  assert.equal((await send("/account/verify", change)).status, 401);
+  const confirmed = await send("/account/verify", change, cookie);
+  assert.equal(confirmed.status, 200);
+  assert.equal((await confirmed.json()).student.email, email);
+  assert.equal((await send("/login", credentials)).status, 401);
+  const nextLogin = await send("/login", { ...credentials, email });
+  assert.equal(nextLogin.status, 200);
+  assert.ok(emails.some(({ email, kind }) => email === credentials.email && kind === "changed"));
+});
 
 test("el panel autentica al usuario y solo expone el contenido publicado", async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ivanna-cms-test-"));
@@ -134,6 +211,10 @@ test("el panel autentica al usuario y solo expone el contenido publicado", async
     assert.equal((await get("/assets/reel-maquillaje-artistico.jpg")).headers.get("content-type"), "image/jpeg");
     assert.equal((await get(`/media/${clipCapture}`)).status, 200);
     assert.equal((await get(`/media/${id}`)).status, 200);
+    const photoInfo = await fetch(`${origin}/media/${id}`, { method: "HEAD" });
+    assert.equal(photoInfo.status, 200);
+    assert.equal(Number(photoInfo.headers.get("content-length")), photo.length);
+    assert.equal((await photoInfo.arrayBuffer()).byteLength, 0);
     assert.equal((await send("/api/admin/logout", {})).status, 200);
     assert.equal((await get("/api/admin/home", true)).status, 401);
 

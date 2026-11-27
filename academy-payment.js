@@ -113,7 +113,7 @@
     return panel;
   }
 
-  function render(container, order, onUpdate, { statusInHeading = false, referrals } = {}) {
+  function render(container, order, onUpdate, { statusInHeading = false, referrals, onCancel } = {}) {
     const amount = node("p", `${price.format(order.cents / 100)}${order.demo ? " · Monto de prueba" : ""}`, "payment-amount");
     container.replaceChildren(amount);
     if (order.discount) {
@@ -187,6 +187,26 @@
     }
 
     receipt.addEventListener("change", () => validateFile(false));
+    let cancel;
+    if (order.status === "awaiting_receipt" && onCancel) {
+      cancel = node("button", "Cancelar inscripción sin pagar", "admin-secondary");
+      cancel.type = "button";
+      cancel.addEventListener("click", async () => {
+        if (!confirm("Confirma solo si todavía no realizaste la transferencia. La inscripción dejará de estar disponible y se liberará el descuento reservado.")) return;
+        cancel.disabled = button.disabled = receipt.disabled = true;
+        feedback.textContent = "Cancelando inscripción…";
+        try {
+          await request(endpoint(order, "cancel"), undefined, "POST");
+          onCancel();
+        } catch (error) {
+          alert.textContent = error.message;
+        } finally {
+          feedback.textContent = "";
+          cancel.disabled = button.disabled = receipt.disabled = false;
+        }
+      });
+      form.append(cancel);
+    }
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (button.disabled) return;
@@ -196,6 +216,7 @@
       }
       button.disabled = true;
       receipt.disabled = true;
+      if (cancel) cancel.disabled = true;
       feedback.textContent = "Enviando comprobante…";
       try {
         const data = await request(`${endpoint(order, "receipt")}?cents=${order.cents}`, receipt.files[0]);
@@ -206,6 +227,7 @@
         feedback.textContent = "";
         button.disabled = false;
         receipt.disabled = false;
+        if (cancel) cancel.disabled = false;
       }
     });
     container.append(pair, form);

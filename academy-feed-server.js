@@ -2,6 +2,11 @@
 
 const photoLimit = 5 * 1024 * 1024;
 const maxPhotos = 4;
+const dailyPosts = 8;
+const dailyComments = 40;
+const maxActivePosts = 50;
+const maxActivePhotos = 32;
+const day = 24 * 60 * 60 * 1000;
 const publicRoot = "/api/academy/feed";
 const adminRoot = "/api/admin/academy/feed";
 const requestIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -96,6 +101,35 @@ function createFeed({ RequestError, readBody, readJsonBody, json, currentAdmin, 
     }
   }
 
+  function checkPostQuota(studentId, photoCount) {
+    const cutoff = Date.now() - day;
+    let recent = 0;
+    let active = 0;
+    let photos = photoCount;
+    for (const post of getPosts()) {
+      if (post.studentId !== studentId) continue;
+      if (Date.parse(post.at) > cutoff) recent += 1;
+      if (post.deleted) continue;
+      active += 1;
+      photos += post.photos.length;
+    }
+    if (recent >= dailyPosts) throw new RequestError(429, "Alcanzaste el límite de publicaciones de las últimas 24 horas.");
+    if (active >= maxActivePosts || photos > maxActivePhotos) {
+      throw new RequestError(409, "Alcanzaste el límite de publicaciones o fotos. Retira una publicación anterior antes de continuar.");
+    }
+  }
+
+  function checkCommentQuota(studentId) {
+    const cutoff = Date.now() - day;
+    let count = 0;
+    for (const post of getPosts()) {
+      for (const comment of post.comments) {
+        if (comment.studentId === studentId && Date.parse(comment.at) > cutoff) count += 1;
+        if (count >= dailyComments) throw new RequestError(429, "Alcanzaste el límite de comentarios de las últimas 24 horas.");
+      }
+    }
+  }
+
   async function createPost(req, res) {
     requireStudent(req);
     const { form, images } = await readPhotoForm(req);
@@ -109,11 +143,13 @@ function createFeed({ RequestError, readBody, readJsonBody, json, currentAdmin, 
       return json(res, 200, { post: postView(post, studentId, getAuthors()) });
     }
 
+    checkPostQuota(studentId, images.length);
     const post = { id: id(), requestId, studentId, text, photos: [], at: now(), hearts: [], comments: [] };
     const saved = await saveWithPhotos(post, images, (entry) => {
       if (requireStudent(req).studentId !== studentId) throw new RequestError(401, "La sesión ha terminado.");
       const duplicate = getPosts().find((item) => item.studentId === studentId && item.requestId === requestId);
       if (duplicate) return getPost(duplicate.id);
+      checkPostQuota(studentId, entry.photos.length);
       savePosts([entry, ...getPosts()]);
       return entry;
     });
@@ -163,6 +199,7 @@ function createFeed({ RequestError, readBody, readJsonBody, json, currentAdmin, 
       const requestId = validateRequestId(body?.requestId);
       const previous = post.comments.find((comment) => comment.studentId === studentId && comment.requestId === requestId);
       if (previous) return json(res, 200, { commentCount: post.comments.filter(publicContent).length });
+      checkCommentQuota(studentId);
       const comment = { id: id(), requestId, studentId, text, at: now() };
       const next = { ...post, comments: [comment, ...post.comments] };
       savePost(next);

@@ -831,9 +831,15 @@
   }
 
   async function loadHome() {
+    const status = $("#home-status");
+    function showFallback(message) {
+      render({ ...defaults, announcementEnabled: false, countdownEnabled: false });
+      status.hidden = false;
+      status.textContent = message;
+    }
     if (location.protocol === "file:") {
       $("#admin-lock").href = `${localServer}/admin`;
-      render(defaults);
+      showFallback("Vista local sin conexión a la publicación. Consulta el sitio para ver las fechas vigentes.");
       return;
     }
 
@@ -845,12 +851,16 @@
       }
       if (!response.ok) throw new Error("No se pudo cargar la portada.");
       render(await response.json(), { preview });
+      status.hidden = true;
+      status.textContent = "";
     } catch {
       if (["127.0.0.1", "localhost"].includes(location.hostname) && location.port === "4173") {
         location.replace(`${localServer}${location.pathname}${location.search}${location.hash}`);
         return;
       }
-      render(defaults);
+      showFallback(preview
+        ? "No pudimos cargar el borrador. Se muestra una vista de respaldo."
+        : "No pudimos cargar la portada publicada. Se muestra una vista de respaldo. Recarga la página para consultar las fechas vigentes.");
     }
   }
 
@@ -999,6 +1009,15 @@
     checkoutSpace.href = payment.orderLink(order);
     payment.render(checkoutPayment, order, (updated) => renderCheckoutOrder(selected, updated), {
       statusInHeading: Boolean(statusTitle), referrals: data.referrals,
+      onCancel() {
+        if (!checkoutDialog.open || checkoutSelection !== selected) return;
+        checkoutOrderStatus = undefined;
+        checkoutPayment.replaceChildren();
+        setText("#checkout-title", "Inscripción cancelada");
+        checkoutFeedback.textContent = "Ya no hay una inscripción activa para este curso. Puedes iniciar otra cuando quieras.";
+        $("#checkout-title").focus();
+        refreshStudentAccount();
+      },
     });
     $("#checkout-title").focus();
   }
@@ -1059,6 +1078,7 @@
       body: JSON.stringify(payload),
     }).catch(() => null);
     const result = await response?.json().catch(() => null);
+    if (response?.status === 202 && path === "register" && result?.emailVerificationRequired) return null;
     if (!response?.ok || !result?.student) throw new Error(result?.error || fallback);
     return result.student;
   }
@@ -1184,6 +1204,10 @@
       form.reset();
       setPasswordVisible(false);
       updateCountryFields();
+      if (!currentStudent) {
+        feedback.textContent = "Si el correo está disponible, recibirás un enlace para completar tu cuenta. Revisa también el correo no deseado.";
+        return;
+      }
       feedback.textContent = activeConfig.communitySuccess;
       renderStudentAccount();
       if (selected) await beginCheckoutPayment(selected);

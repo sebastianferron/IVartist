@@ -5,8 +5,10 @@
   const section = document.querySelector("#clips");
   const viewport = document.querySelector("#social-clips-viewport");
   const track = document.querySelector("#social-clips-track");
+  const motionButton = document.querySelector("#social-clips-motion");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let unmount;
+  let paused = false;
 
   function createCycle(clips, repeated = false) {
     const cycle = document.createElement("ul");
@@ -100,7 +102,7 @@
     }
 
     function updateMotion() {
-      const moving = visible && distance > 0 && !document.hidden && !reducedMotion.matches && !hovered && !viewport.querySelector(":focus-visible");
+      const moving = visible && distance > 0 && !document.hidden && !reducedMotion.matches && !paused && !hovered && !viewport.querySelector(":focus-visible");
       if (moving && !frame) frame = requestAnimationFrame(tick);
       else if (!moving) {
         cancelAnimationFrame(frame);
@@ -112,6 +114,7 @@
     function layout() {
       const nextDistance = original.getBoundingClientRect().width;
       if (!nextDistance || !viewport.clientWidth) return;
+      motionButton.hidden = reducedMotion.matches;
       const progress = distance ? viewport.scrollLeft % distance / distance : 0;
       distance = nextDistance;
       const extra = reducedMotion.matches ? 0 : Math.ceil(viewport.clientWidth / distance);
@@ -136,6 +139,12 @@
     }
     viewport.addEventListener("focusin", updateMotion, { signal });
     viewport.addEventListener("focusout", () => queueMicrotask(updateMotion), { signal });
+    motionButton.setAttribute("aria-pressed", String(paused));
+    motionButton.addEventListener("click", () => {
+      paused = !paused;
+      motionButton.setAttribute("aria-pressed", String(paused));
+      updateMotion();
+    }, { signal });
     document.addEventListener("visibilitychange", updateMotion, { signal });
     reducedMotion.addEventListener("change", layout, { signal });
 

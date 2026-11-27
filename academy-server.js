@@ -11,6 +11,7 @@ const { createFinance } = require("./academy-finance");
 const { createPlugNmeet } = require("./academy-plugnmeet");
 const { createWaha } = require("./academy-waha");
 const { localMedia } = require("./academy-media");
+const { stripPhotoMetadata } = require("./academy-photo");
 
 const deriveKey = promisify(scrypt);
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
@@ -18,6 +19,8 @@ const LIMIT_WINDOW = 15 * 60 * 1000;
 const MB = 1024 * 1024;
 const AVATAR_LIMIT = 5 * MB;
 const VIDEO_LINK_TTL = 20 * 60_000;
+const EMAIL_VERIFICATION_TTL = 30 * 60_000;
+const EMAIL_VERIFICATION_COOLDOWN = 60_000;
 const MEDIA = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf", mp4: "video/mp4" };
 const SOCIAL_NETWORKS = [
   { key: "instagram", label: "Instagram", base: "https://www.instagram.com/", pattern: /^(?!\.)[a-z0-9_.]{1,30}(?<!\.)$/i },
@@ -108,6 +111,9 @@ function createAcademy(dataDir, helpers) {
   const attempts = new Map(scheduledNotifications ? readJsonFile(attemptsFile, []) : []);
   const dummySalt = id();
   const playbackSecret = helpers.playbackSecret || randomBytes(32);
+  const checkpointNotifications = helpers.checkpointNotifications || (async () => {});
+  const { sendAccountEmail, requireVerifiedAccounts = false, verificationSecret = randomBytes(32) } = helpers;
+  let sendingAccountEmails = false;
   let sendingEmails = false;
   let sendingWhatsApp = false;
   const push = createPush(dataDir, { readJsonFile, writeJsonFile, sendPush, contact: helpers.pushContact });
@@ -125,7 +131,8 @@ function createAcademy(dataDir, helpers) {
     const earned = previous?.status !== "approved" && order.status === "approved" ? referrals.newReward(order) : null;
     if (earned) order = { ...order, referralReward: earned };
     const orders = state.orders.filter((existing) => existing.id !== order.id);
-    const email = notify && !order.demo && state.students.find(({ id }) => id === order.studentId)?.email;
+    const buyer = state.students.find(({ id }) => id === order.studentId);
+    const email = notify && !order.demo && (!requireVerifiedAccounts || buyer?.emailVerifiedAt) && buyer?.email;
     const outbox = email ? [...state.paymentEmails, {
       id: `payment/${order.id}/${order.submissionId}/${order.status}`, orderId: order.id,
       title: order.title, email, status: order.status, createdAt: order.updatedAt, attempts: 0,
@@ -253,21 +260,30 @@ function createAcademy(dataDir, helpers) {
     sendingEmails = true;
     try {
       const timestamp = Date.now();
-      const pending = state.paymentEmails.filter((job) => !job.sentAt && !job.failedAt && (job.nextAttemptAt || 0) <= timestamp);
+      const eligibleAddress = (job) => {
+        if (!requireVerifiedAccounts) return true;
+        const owner = state.orders.find(({ id }) => id === job.orderId)?.studentId;
+        return state.students.some(({ id, email, emailVerifiedAt }) => id === owner && emailVerifiedAt && email === job.email);
+      };
+      const pending = state.paymentEmails.filter((job) => !job.sentAt && !job.failedAt && (job.nextAttemptAt || 0) <= timestamp && eligibleAddress(job));
       for (const job of pending.slice(0, 10)) {
         const elapsed = job.firstAttemptAt && timestamp - Date.parse(job.firstAttemptAt);
         if (job.attempts >= 7 || elapsed >= 23 * 60 * 60 * 1000) {
           updatePaymentEmail(job.id, { failedAt: now() });
+          await checkpointNotifications();
           continue;
         }
         const attempts = job.attempts + 1;
         updatePaymentEmail(job.id, { attempts, firstAttemptAt: job.firstAttemptAt || now(), nextAttemptAt: timestamp + 60_000 * 2 ** (attempts - 1) });
+        await checkpointNotifications();
         try {
+          if (!eligibleAddress(job)) continue;
           await sendPaymentEmail(job);
           updatePaymentEmail(job.id, { sentAt: now() });
         } catch {
           if (attempts === 7) updatePaymentEmail(job.id, { failedAt: now() });
         }
+        await checkpointNotifications();
       }
     } catch (error) {
       console.error("No se pudo actualizar la cola de correo.", error.code || "");
@@ -289,27 +305,42 @@ function createAcademy(dataDir, helpers) {
       for (const job of pending.slice(0, 5)) {
         const config = waha.settings();
         if (!config.enabled) break;
+        if (job.claimedAt) {
+          update(job, { delivery: "unknown" });
+          await checkpointNotifications();
+          continue;
+        }
         const order = state.orders.find((item) => item.id === job.orderId);
         if (config.destinationId !== job.destinationId || order?.status !== "submitted" || order.submissionId !== job.submissionId) {
           update(job, { delivery: "skipped" });
+          await checkpointNotifications();
           continue;
         }
         if (job.attempts >= 7) {
           update(job, { delivery: "failed" });
+          await checkpointNotifications();
           continue;
         }
         const attempts = job.attempts + 1;
-        update(job, { attempts, nextAttemptAt: timestamp + 60_000 * 2 ** (attempts - 1) });
+        const retry = { attempts, nextAttemptAt: timestamp + 60_000 * 2 ** (attempts - 1) };
+        let file = null;
         try {
           const extension = order.receipt?.split(".").at(-1);
-          const bytes = config.attachReceipt && validAsset(order.receipt, "receipt") && await media.read(order.receipt);
-          const file = bytes ? { data: bytes.toString("base64"), mimetype: MEDIA[extension], filename: `comprobante.${extension}` } : null;
-          if (waha.settings() !== config || state.orders.find((item) => item.id === job.orderId) !== order) continue;
-          const student = state.students.find((item) => item.id === order.studentId);
-          update(job, { delivery: await waha.notify(config, order, student, file) });
+          const bytes = waha.deliverAttachments(config) && validAsset(order.receipt, "receipt") && await media.read(order.receipt);
+          if (bytes) file = { data: bytes.toString("base64"), mimetype: MEDIA[extension], filename: `comprobante.${extension}` };
         } catch {
-          if (attempts === 7) update(job, { delivery: "failed" });
+          update(job, { ...retry, ...(attempts === 7 && { delivery: "failed" }) });
+          await checkpointNotifications();
+          continue;
         }
+        if (waha.settings() !== config || state.orders.find((item) => item.id === job.orderId) !== order) continue;
+        update(job, { ...retry, claimedAt: now() });
+        await checkpointNotifications();
+        let delivery;
+        try { delivery = await waha.notify(config, order, file); }
+        catch (error) { delivery = error.deliveryRejected ? (attempts === 7 ? "failed" : null) : "unknown"; }
+        update(job, { delivery, claimedAt: null });
+        await checkpointNotifications();
       }
     } catch (error) {
       console.error("No se pudo actualizar la cola de WhatsApp.", error.code || "");
@@ -319,17 +350,32 @@ function createAcademy(dataDir, helpers) {
   }
 
   async function runPaymentNotifications() {
-    for (const { message, studentId } of state.pushJobs.slice(0, 5)) {
-      const recipients = state.pushSubscriptions.filter((item) => !studentId || item.studentId === studentId);
-      await deliverPush(recipients, message);
-      save({ ...state, pushJobs: state.pushJobs.filter((job) => job.message.id !== message.id) });
+    const timestamp = Date.now();
+    for (const job of state.pushJobs.filter((item) => (item.nextAttemptAt || 0) <= timestamp && !item.failedAt).slice(0, 5)) {
+      const { message, studentId } = job;
+      const attempts = (job.attempts || 0) + 1;
+      const recipients = state.pushSubscriptions.filter((item) => (!studentId || item.studentId === studentId)
+        && (!job.pending || job.pending.includes(sessionDigest(item.subscription.endpoint))));
+      const queued = { ...job, attempts, nextAttemptAt: timestamp + 60_000 * 2 ** (attempts - 1) };
+      save({ ...state, pushJobs: state.pushJobs.map((item) => item.message.id === message.id ? queued : item) });
+      await checkpointNotifications();
+      const pending = (await deliverPush(recipients, message)).map((item) => sessionDigest(item.subscription.endpoint));
+      const next = pending.length && { ...queued, pending, ...(attempts >= 5 && { failedAt: now() }) };
+      save({ ...state, pushJobs: state.pushJobs.flatMap((item) => item.message.id !== message.id ? [item] : next ? [next] : [])
+        .filter((item) => !item.failedAt || timestamp - Date.parse(item.failedAt) < 7 * 24 * 60 * 60_000) });
+      await checkpointNotifications();
     }
-    await Promise.all([runPaymentEmails(), runPaymentWhatsApp()]);
+    await runPaymentEmails();
+    await runPaymentWhatsApp();
   }
 
   function startPaymentNotifications() {
-    const timer = setInterval(runPaymentNotifications, 30_000);
-    queueMicrotask(runPaymentNotifications);
+    const drain = async () => {
+      await runPaymentNotifications();
+      await runAccountNotifications();
+    };
+    const timer = setInterval(drain, 30_000);
+    queueMicrotask(drain);
     return () => clearInterval(timer);
   }
 
@@ -341,6 +387,23 @@ function createAcademy(dataDir, helpers) {
       history.push({ status: order.status, at: order.reviewedAt, reviewer: order.reviewer, note: order.note });
     }
     return history;
+  }
+
+  function reconcilePayment(order, input) {
+    if (order.demo) return {};
+    const supplied = requireText(input ?? "", 80, "Referencia bancaria", true).normalize("NFKC");
+    if (!/^[A-Za-z0-9 .\/-]+$/.test(supplied)) {
+      throw new RequestError(400, "Escribe la referencia bancaria usando letras y números.");
+    }
+    const bankReference = supplied.toUpperCase().replace(/[ .\/-]/g, "");
+    if (bankReference.length < 4 || bankReference.length > 48) {
+      throw new RequestError(400, "La referencia bancaria debe contener entre 4 y 48 letras o números.");
+    }
+    if (state.orders.some((item) => item.id !== order.id && item.bankReference === bankReference)) {
+      throw new RequestError(409, "Esta referencia bancaria ya está asociada a otro pago.");
+    }
+    referrals.checkApproval(order);
+    return { bankReference };
   }
 
   function requireText(value, max, label, required = false) {
@@ -462,11 +525,18 @@ function createAcademy(dataDir, helpers) {
     return { token, session: { digest: sessionDigest(token), studentId, expires: Date.now() + SESSION_SECONDS * 1000 } };
   }
 
+  function requireVerifiedEmail(session) {
+    const student = state.students.find(({ id }) => id === session.studentId);
+    if (requireVerifiedAccounts && !student?.demo && !student?.emailVerifiedAt) {
+      throw new RequestError(403, "Verifica tu correo en Mi perfil antes de inscribirte o enviar un comprobante.");
+    }
+  }
+
   function setStudentCookie(req, res, token) {
     res.setHeader("Set-Cookie", `ivanna_student=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_SECONDS}${req.ivannaSecure ? "; Secure" : ""}`);
   }
 
-  function openSession(req, res, student, registering) {
+  function openSession(req, res, student, registering, changes = {}) {
     const previous = studentSession(req);
     const timestamp = Date.now();
     const sessions = state.sessions.filter((session) => session.digest !== previous?.digest && session.expires > timestamp);
@@ -475,7 +545,7 @@ function createAcademy(dataDir, helpers) {
       if (item.digest !== previous?.digest) return [item];
       return item.studentId === student.id ? [{ ...item, digest: session.digest }] : [];
     });
-    save({ ...state, students: registering ? [...state.students, student] : state.students, sessions: [...sessions, session], pushSubscriptions });
+    save({ ...state, ...changes, students: registering ? [...state.students, student] : state.students, sessions: [...sessions, session], pushSubscriptions });
     setStudentCookie(req, res, token);
   }
 
@@ -491,7 +561,7 @@ function createAcademy(dataDir, helpers) {
   }
 
   function findOrder(studentId, offerId = PRIMARY) {
-    return state.orders.find((order) => order.studentId === studentId && orderOffer(order) === offerId);
+    return state.orders.find((order) => order.studentId === studentId && orderOffer(order) === offerId && order.status !== "cancelled");
   }
 
   function lookupOffer(offerId) {
@@ -522,19 +592,22 @@ function createAcademy(dataDir, helpers) {
     return first && !first.includes("@") ? first : "Participante";
   }
 
-  function communityProfile(student, { hasReview, publicParticipant = false } = {}) {
-    const { avatar, handles = {}, specialty } = student.communityProfile || {};
+  function communityProfile(student, { hasReview, publicParticipant = false, owner = false } = {}) {
+    const { avatar, handles = {}, specialty, visibility } = student.communityProfile || {};
+    const name = publicName(student);
+    const privateProfile = visibility === "private";
+    if (privateProfile && !owner) return { name, displayName: name, socials: [], url: null, avatar: null };
     const socials = SOCIAL_NETWORKS.filter(({ key }) => handles[key]).map(({ key, label, base }) => ({
       key, label, handle: handles[key], href: `${base}${encodeURIComponent(handles[key])}`,
     }));
     const published = avatar || socials.length || specialty || (hasReview ?? state.orders.some((order) => order.studentId === student.id && order.review?.status === "approved"));
-    const name = publicName(student);
     const displayName = student.name.trim().replace(/\s+/gu, " ");
     return {
       name, displayName: (!publicParticipant || published) && displayName && !displayName.includes("@") ? displayName : name, socials,
       ...(specialty && { specialty }),
-      url: published || publicParticipant ? `/perfil/${student.id}` : null,
+      url: !privateProfile && (published || publicParticipant) ? `/perfil/${student.id}` : null,
       avatar: avatar ? `/api/academy/profiles/${student.id}/avatar?v=${avatar}` : null,
+      ...(owner && privateProfile && { visibility }),
     };
   }
 
@@ -652,10 +725,13 @@ function createAcademy(dataDir, helpers) {
         ...(category === "course" && { chapterCount: courseChapters(offer).length }),
       };
     });
-    const orders = student ? state.orders.filter((order) => order.studentId === student.id).map(studentOrder) : [];
+    const orders = student ? state.orders.filter((order) => order.studentId === student.id && order.status !== "cancelled").map(studentOrder) : [];
     return {
-      course, offers, student: publicStudent(student), profile: student ? communityProfile(student) : null,
-      account: student ? { whatsapp: student.profile?.whatsapp || "" } : null,
+      course, offers, student: publicStudent(student), profile: student ? communityProfile(student, { owner: true }) : null,
+      account: student ? {
+        whatsapp: student.profile?.whatsapp || "",
+        ...(requireVerifiedAccounts && !student.demo ? { emailVerified: Boolean(student.emailVerifiedAt), emailVerificationPending: Boolean(student.pendingEmail?.expiresAt > Date.now()) } : {}),
+      } : null,
       referrals: referrals.member(student),
       order: orders.find((order) => order.offerId === PRIMARY) || null, orders,
     };
@@ -674,11 +750,99 @@ function createAcademy(dataDir, helpers) {
       return item.digest === session.digest ? [{ ...item, digest: replacement.digest }] : [];
     });
     const orders = new Set(state.orders.filter(({ studentId }) => studentId === updated.id).map(({ id }) => id));
-    const paymentEmails = state.paymentEmails.map((job) => orders.has(job.orderId) && !job.sentAt && !job.failedAt
-      ? { ...job, email: updated.email } : job);
+    const paymentEmails = updated.emailVerifiedAt || !requireVerifiedAccounts
+      ? state.paymentEmails.map((job) => orders.has(job.orderId) && !job.sentAt && !job.failedAt
+        ? { ...job, email: updated.email } : job)
+      : state.paymentEmails;
     save({ ...state, students, sessions: [...sessions, replacement], pushSubscriptions, paymentEmails });
     setStudentCookie(req, res, token);
     return json(res, 200, studentView(replacement));
+  }
+
+  function verificationToken(kind, record, email) {
+    return createHmac("sha256", verificationSecret).update(JSON.stringify([`ivartist/email/${kind}`, record.id, email, record.expiresAt])).digest("hex");
+  }
+
+  function matchVerification(token, expected) {
+    return typeof token === "string" && /^[a-f0-9]{64}$/.test(token) &&
+      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
+  }
+
+  function assertEmailProvider() {
+    if (!sendAccountEmail) throw new RequestError(503, "La verificación de correo no está disponible. Intenta más tarde.");
+  }
+
+  function queueAccountEmail(kind, email, expiresAt, recordId, owner, changes = {}) {
+    const active = (state.accountEmailJobs || []).filter((job) => job.expiresAt > Date.now());
+    save({ ...state, ...changes, accountEmailJobs: [...active, { id: id(), kind, email, expiresAt, recordId, owner, nextAttemptAt: 0 }] });
+    if (!scheduledNotifications) queueMicrotask(runAccountNotifications);
+  }
+
+  async function runAccountNotifications() {
+    if (!sendAccountEmail || sendingAccountEmails) return;
+    sendingAccountEmails = true;
+    try {
+      const timestamp = Date.now();
+      const all = state.accountEmailJobs || [];
+      const active = all.filter((job) => job.expiresAt > timestamp);
+      if (active.length !== all.length) save({ ...state, accountEmailJobs: active });
+      for (const job of active.filter(({ nextAttemptAt }) => nextAttemptAt <= timestamp).slice(0, 5)) {
+        const { id: jobId, kind, email, recordId, owner } = job;
+        const record = kind === "register"
+          ? (state.pendingRegistrations || []).find(({ id }) => id === recordId)
+          : state.students.find(({ id }) => id === owner)?.pendingEmail;
+        if (kind !== "changed" && (record?.id !== recordId || record.expiresAt <= Date.now())) {
+          save({ ...state, accountEmailJobs: state.accountEmailJobs.filter(({ id }) => id !== jobId) });
+          continue;
+        }
+        save({ ...state, accountEmailJobs: state.accountEmailJobs.map((item) => item.id === jobId ? { ...item, nextAttemptAt: timestamp + 60_000 } : item) });
+        await checkpointNotifications();
+        const prefix = kind === "register" ? "verificar-registro" : "verificar-correo";
+        const fragment = kind === "changed" ? "" : `${prefix}=${recordId}.${verificationToken(kind, record, email)}`;
+        try {
+          await sendAccountEmail({ id: `account/${jobId}`, kind, email, fragment });
+        } catch {
+          continue;
+        }
+        save({ ...state, accountEmailJobs: state.accountEmailJobs.filter(({ id }) => id !== jobId) });
+        await checkpointNotifications();
+      }
+    } catch {
+      console.warn("No se pudo actualizar la cola de verificación de cuentas.");
+    } finally {
+      sendingAccountEmails = false;
+    }
+  }
+
+  function requestEmailChange(student, email, updates = {}) {
+    assertEmailProvider();
+    const requestedAt = Date.now();
+    if (student.pendingEmail?.requestedAt > requestedAt - EMAIL_VERIFICATION_COOLDOWN) {
+      throw new RequestError(429, "Espera un minuto antes de solicitar otro enlace de verificación.");
+    }
+    const record = { id: id(), email, requestedAt, expiresAt: requestedAt + EMAIL_VERIFICATION_TTL };
+    const students = state.students.map((item) => item.id === student.id ? { ...student, ...updates, pendingEmail: record } : item);
+    queueAccountEmail("email", email, record.expiresAt, record.id, student.id, { students });
+  }
+
+  async function verifyAccountEmail(req, res) {
+    requireStudent(req);
+    const body = await readJsonBody(req, 1024);
+    const session = requireStudent(req);
+    allowAuthAttempt(req, "verify-email");
+    const student = state.students.find(({ id }) => id === session.studentId);
+    const pending = student.pendingEmail;
+    if (!pending || pending.id !== body?.id || pending.expiresAt <= Date.now() ||
+        !matchVerification(body.token, verificationToken("email", pending, pending.email))) {
+      throw new RequestError(400, "El enlace no es válido para esta cuenta o venció. Solicita otro desde Mi perfil.");
+    }
+    if (state.students.some((item) => item.email === pending.email && item.id !== student.id)) {
+      throw new RequestError(409, "Ese correo electrónico ya está en uso.");
+    }
+    if (student.emailVerifiedAt && student.email !== pending.email) {
+      queueAccountEmail("changed", student.email, Date.now() + EMAIL_VERIFICATION_TTL, "", student.id);
+    }
+    return saveAccount(req, res, session, { ...student, email: pending.email, pendingEmail: null, emailVerifiedAt: now() }, true);
   }
 
   async function updateAccount(req, res, changingPassword) {
@@ -716,23 +880,54 @@ function createAcademy(dataDir, helpers) {
     if (emailChanged && state.students.some((item) => item.email === email && item.id !== student.id)) {
       throw new RequestError(409, "Ese correo electrónico ya está en uso.");
     }
-    if (changingPassword) return saveAccount(req, res, session, { ...student, ...credentials }, true);
+    if (changingPassword) return saveAccount(req, res, session, { ...student, ...credentials, pendingEmail: null }, true);
 
     const phone = requireText(body?.whatsapp, 32, "WhatsApp");
     const number = normalizeWhatsAppNumber(phone);
     if (phone && (!phone.startsWith("+") || !number)) throw new RequestError(400, "Escribe el WhatsApp con el código de país, por ejemplo +591 70000000.");
     const profile = { ...student.profile, whatsapp: number ? `+${number}` : "" };
+    if (emailChanged && requireVerifiedAccounts) {
+      requestEmailChange(student, email, { name, profile });
+      return json(res, 202, studentView(session));
+    }
     return saveAccount(req, res, session, { ...student, name, email, profile }, secureChange);
   }
 
-  function adminView() {
-    const students = new Map(state.students.map((student) => [student.id, student]));
+  function adminChangeToken(section) {
+    let source;
+    if (section === "payments") source = [state.orders.filter((order) => order.status !== "awaiting_receipt" && order.status !== "cancelled")
+      .map(({ id, status, submissionId, receipt, updatedAt }) => [id, status, submissionId, receipt, updatedAt]),
+    state.paymentEmails.map(({ id, sentAt, failedAt }) => [id, sentAt, failedAt]),
+    state.paymentWhatsApp.map(({ orderId, submissionId, delivery }) => [orderId, submissionId, delivery])];
+    else if (section === "summary") source = adminMetrics();
+    else if (section === "students") source = state.students.map((student) => [student.id, student.name, student.email, student.profile]);
+    else if (section === "reviews") source = allReviews().map(({ id, revision }) => [id, revision]);
+    else if (section === "comments") source = Object.values(state.discussion).flatMap(({ comments }) => comments.map(({ id, revision }) => [id, revision]));
+    else throw new RequestError(400, "Selecciona una vista válida.");
+    return createHash("sha256").update(JSON.stringify(source)).digest("hex");
+  }
+
+  function adminOrders(students) {
     const whatsApp = new Map(state.paymentWhatsApp.map((job) => [job.orderId, job.delivery || "queued"]));
     const emails = new Map();
     for (const { orderId, status, sentAt, failedAt } of state.paymentEmails) {
       if (!emails.has(orderId)) emails.set(orderId, []);
       emails.get(orderId).push({ status, delivery: sentAt ? "sent" : failedAt ? "failed" : sendPaymentEmail ? "queued" : "unconfigured" });
     }
+    return state.orders.filter((order) => order.status !== "awaiting_receipt" && order.status !== "cancelled").map((order) => ({
+      ...publicOrder(order),
+      student: { ...publicStudent(students.get(order.studentId)), whatsapp: students.get(order.studentId)?.profile?.whatsapp },
+      receipt: order.receipt,
+      submittedAt: order.submittedAt,
+      submissionId: order.submissionId,
+      bankReference: order.bankReference,
+      paymentHistory: paymentHistory(order),
+      emailStatus: emails.get(order.id) || [],
+      whatsappStatus: whatsApp.get(order.id) || "",
+    })).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  }
+
+  function adminMetrics() {
     const month = new Intl.DateTimeFormat("es-BO", { timeZone: "America/La_Paz", month: "numeric", year: "numeric" });
     const approved = state.orders.filter((order) => order.status === "approved" && !order.demo);
     const current = Object.fromEntries(month.formatToParts(Date.now()).map(({ type, value }) => [type, value]));
@@ -747,6 +942,28 @@ function createAcademy(dataDir, helpers) {
       return { label: monthLabel.format(date), cents: totals.get(month.format(date)) || 0 };
     });
     return {
+      students: state.students.filter((student) => !student.demo).length,
+      approved: approved.length,
+      pending: state.orders.filter((order) => order.status === "submitted").length,
+      monthCents: revenue.at(-1).cents,
+      revenue,
+    };
+  }
+
+  function adminComments(students) {
+    return Object.entries(state.discussion).flatMap(([offerId, { comments }]) => comments.map(({ id, studentId, text, at, revision, status }) => ({
+      id, text, at, revision, status, author: students.get(studentId)?.name || "Participante", course: lookupOffer(offerId)?.title || "Curso",
+    }))).sort((a, b) => b.at.localeCompare(a.at));
+  }
+
+  function adminStudents() {
+    return state.students.map((student) => ({ ...publicStudent(student), profile: student.profile || null })).reverse();
+  }
+
+  function adminView() {
+    const students = new Map(state.students.map((student) => [student.id, student]));
+    return {
+      changeTokens: Object.fromEntries(["payments", "summary", "students", "reviews", "comments"].map((section) => [section, adminChangeToken(section)])),
       draft: state.draft,
       revision: state.revision,
       open: Boolean(state.published?.open),
@@ -766,63 +983,69 @@ function createAcademy(dataDir, helpers) {
         };
       }),
       reviews: allReviews(),
-      courseComments: Object.entries(state.discussion).flatMap(([offerId, { comments }]) => comments.map(({ id, studentId, text, at, revision, status }) => ({
-        id, text, at, revision, status, author: students.get(studentId)?.name || "Participante", course: lookupOffer(offerId)?.title || "Curso",
-      }))).sort((a, b) => b.at.localeCompare(a.at)),
+      courseComments: adminComments(students),
       paymentEmailConfigured: Boolean(sendPaymentEmail),
-      students: state.students.map((student) => ({ ...publicStudent(student), profile: student.profile || null })).reverse(),
-      orders: state.orders.filter((order) => order.status !== "awaiting_receipt").map((order) => ({
-        ...publicOrder(order),
-        student: { ...publicStudent(students.get(order.studentId)), whatsapp: students.get(order.studentId)?.profile?.whatsapp },
-        receipt: order.receipt,
-        submittedAt: order.submittedAt,
-        submissionId: order.submissionId,
-        paymentHistory: paymentHistory(order),
-        emailStatus: emails.get(order.id) || [],
-        whatsappStatus: whatsApp.get(order.id) || "",
-      })).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)),
-      metrics: {
-        students: state.students.filter((student) => !student.demo).length,
-        approved: approved.length,
-        pending: state.orders.filter((order) => order.status === "submitted").length,
-        monthCents: revenue.at(-1).cents,
-        revenue,
-      },
+      students: adminStudents(),
+      orders: adminOrders(students),
+      metrics: adminMetrics(),
     };
   }
 
+  function isMp4Container(bytes, fileSize) {
+    if (bytes.length < 16 || bytes.toString("ascii", 4, 8) !== "ftyp") return false;
+    let length = bytes.readUInt32BE(0);
+    const extended = length === 1;
+    if (extended) {
+      if (bytes.length < 24 || bytes.readUInt32BE(8) !== 0) return false;
+      length = bytes.readUInt32BE(12);
+    }
+    const brandOffset = extended ? 16 : 8;
+    if (length < brandOffset + 8 || length >= fileSize || length % 4 !== 0) return false;
+    const brand = bytes.toString("latin1", brandOffset, brandOffset + 4);
+    return /^[\x20-\x7e]{4}$/.test(brand) && !["qt  ", "avif", "avis", "heic", "heix", "hevc", "hevx", "mif1", "msf1"].includes(brand);
+  }
+
   function assetExtension(bytes, kind) {
-    if (kind === "video") return bytes.length >= 16 && bytes.toString("ascii", 4, 8) === "ftyp" && !["qt  ", "avif", "heic", "mif1"].includes(bytes.toString("ascii", 8, 12)) ? "mp4" : null;
+    if (kind === "video") return isMp4Container(bytes, bytes.length) ? "mp4" : null;
     if (kind === "receipt" && bytes.length > 16 && bytes.toString("ascii", 0, 5) === "%PDF-") return "pdf";
     return photoExtension(bytes);
   }
 
   async function storeAsset(kind, bytes) {
     const extension = assetExtension(bytes, kind);
+    const cleanPhoto = kind === "avatar" || kind === "feed";
+    const payload = cleanPhoto ? stripPhotoMetadata(bytes, extension) : bytes;
     if (!extension) throw new RequestError(415, kind === "video" ? "Selecciona un video MP4 válido." : "Selecciona un archivo con el formato indicado.");
+    if (!payload) throw new RequestError(415, "Selecciona una imagen válida de hasta 8192 píxeles por lado y 40 megapíxeles.");
     const filename = `${kind}-${id()}.${extension}`;
-    await media.write(filename, bytes);
+    try { await media.write(filename, payload); }
+    catch (error) {
+      if (kind === "video") throw new RequestError(503, "No se pudo guardar el video. Vuelve a intentar.");
+      throw error;
+    }
     return filename;
   }
 
   async function storeVideoStream(req) {
     const length = Number(req.headers["content-length"]);
-    if (!Number.isSafeInteger(length) || length < 16) throw new RequestError(411, "Selecciona un archivo MP4 con tamaño conocido.");
+    if (!Number.isSafeInteger(length)) throw new RequestError(411, "Selecciona un archivo MP4 con tamaño conocido.");
+    if (length < 24) throw new RequestError(415, "Selecciona un video MP4 válido.");
     if (length > 64 * MB) throw new RequestError(413, "El video supera el límite de 64 MB.");
     const source = req.iterator({ destroyOnReturn: false });
     const parts = [];
     let size = 0;
     try {
-      while (size < 16) {
+      while (size < 24) {
         const part = await source.next();
         if (part.done) throw new RequestError(415, "Selecciona un video MP4 válido.");
         parts.push(part.value);
         size += part.value.length;
       }
-      const header = Buffer.concat(parts.map((part) => part.subarray(0, 16))).subarray(0, 16);
-      if (!assetExtension(header, "video")) throw new RequestError(415, "Selecciona un video MP4 válido.");
+      const header = Buffer.concat(parts.map((part) => part.subarray(0, 24))).subarray(0, 24);
+      if (!isMp4Container(header, length)) throw new RequestError(415, "Selecciona un video MP4 válido.");
       const filename = `video-${id()}.mp4`;
-      await media.writeStream(filename, length, parts, source);
+      try { await media.writeStream(filename, length, parts, source); }
+      catch { throw new RequestError(503, "No se pudo guardar el video. Vuelve a intentar."); }
       return filename;
     } finally {
       await source.return?.();
@@ -920,9 +1143,11 @@ function createAcademy(dataDir, helpers) {
     const specialty = form.has("specialty")
       ? requireText(form.get("specialty"), 100, "Especialidad").replace(/\s+/gu, " ")
       : student.communityProfile?.specialty || "";
+    const visibility = form.get("visibility") ?? student.communityProfile?.visibility ?? "public";
+    if (!["public", "private"].includes(visibility)) throw new RequestError(400, "Selecciona quién puede ver tu perfil.");
     const previous = student.communityProfile?.avatar || "";
     const avatar = bytes ? await storeAsset("avatar", bytes) : form.get("removeAvatar") === "1" ? "" : previous;
-    const next = { ...student, communityProfile: { avatar, handles, specialty } };
+    const next = { ...student, communityProfile: { avatar, handles, specialty, visibility } };
     try {
       if (requireStudent(req).studentId !== student.id || !state.students.includes(student)) {
         throw new RequestError(409, "El perfil cambió mientras se guardaba. Vuelve a intentar.");
@@ -933,7 +1158,7 @@ function createAcademy(dataDir, helpers) {
       throw error;
     }
     if (previous !== avatar) await discardAsset(previous, "avatar");
-    return json(res, 200, { profile: communityProfile(next) });
+    return json(res, 200, { profile: communityProfile(next, { owner: true }) });
   }
 
   async function discardAsset(filename, kind) {
@@ -944,6 +1169,19 @@ function createAcademy(dataDir, helpers) {
   async function sendAsset(req, res, filename, kind, download = false) {
     if (!validAsset(filename, kind)) throw new RequestError(404, "Archivo no disponible.");
     const extension = path.extname(filename).slice(1);
+    if (kind === "avatar" || kind === "feed") {
+      // Previously uploaded photos may still contain metadata. Never send the raw bytes.
+      const headers = { "Content-Type": MEDIA[extension], "Cross-Origin-Resource-Policy": "same-origin" };
+      if (req.method === "HEAD") {
+        res.writeHead(200, headers);
+        return res.end();
+      }
+      const original = await media.read(filename);
+      const payload = stripPhotoMetadata(original, extension);
+      if (!payload) throw new RequestError(404, "Imagen no disponible.");
+      res.writeHead(200, { ...headers, "Content-Length": payload.length });
+      return res.end(payload);
+    }
     const size = await media.size(filename);
     if (!Number.isSafeInteger(size)) throw new RequestError(404, "Archivo no disponible.");
     const headers = { "Content-Type": MEDIA[extension], "Content-Length": size, "Cross-Origin-Resource-Policy": "same-origin" };
@@ -997,6 +1235,35 @@ function createAcademy(dataDir, helpers) {
     return sendAsset(req, res, filename, "video");
   }
 
+  async function verifyRegistration(req, res) {
+    allowAuthAttempt(req, "verify-register");
+    const body = await readJsonBody(req, 2048);
+    const pending = (state.pendingRegistrations || []).find(({ id }) => id === body?.id);
+    if (!pending || pending.expiresAt <= Date.now() ||
+        !matchVerification(body.token, verificationToken("register", pending, pending.student.email))) {
+      throw new RequestError(400, "El enlace de registro no es válido o venció. Vuelve a solicitar el registro.");
+    }
+    if (typeof body?.password !== "string" || body.password.length < 10 || body.password.length > 128) {
+      throw new RequestError(400, "Escribe la contraseña que elegiste al registrarte.");
+    }
+    const { email, salt, passwordHash } = pending.student;
+    const hash = await deriveKey(body.password, salt, 64);
+    if (!timingSafeEqual(hash, Buffer.from(passwordHash, "hex"))) throw new RequestError(401, "La contraseña no coincide con la que elegiste al registrarte.");
+    if (!(state.pendingRegistrations || []).includes(pending) || pending.expiresAt <= Date.now() || state.students.some((item) => item.email === email)) {
+      throw new RequestError(409, "El enlace ya no está disponible. Inicia sesión o vuelve a solicitar el registro.");
+    }
+    const student = { ...pending.student, emailVerifiedAt: now() };
+    const pendingRegistrations = state.pendingRegistrations.filter((record) => record.student.email !== email);
+    openSession(req, res, student, true, { pendingRegistrations });
+    return json(res, 201, studentView({ studentId: student.id }));
+  }
+
+  function requireRecentAdmin(admin) {
+    if (!Number.isFinite(admin.authenticatedAt) || Date.now() - admin.authenticatedAt > 15 * 60_000) {
+      throw new RequestError(403, "Vuelve a iniciar sesión en el panel antes de cambiar una integración con acceso a datos.");
+    }
+  }
+
   async function authenticate(req, res, registering) {
     allowAuthAttempt(req);
     const body = await readJsonBody(req);
@@ -1012,9 +1279,22 @@ function createAcademy(dataDir, helpers) {
     const salt = registering ? id() : student?.salt || dummySalt;
     const key = await deriveKey(password, salt, 64);
     if (registering) {
-      if (state.students.some((item) => item.email === email)) throw new RequestError(409, "Ya hay una cuenta con ese correo. Inicia sesión.");
+      const existing = state.students.some((item) => item.email === email);
+      if (existing && !requireVerifiedAccounts) throw new RequestError(409, "Ya hay una cuenta con ese correo. Inicia sesión.");
       const invitation = referrals.invitation(body.referralCode);
       student = { id: id(), name, email, profile, ...(invitation && { invitation }), salt, passwordHash: key.toString("hex"), createdAt: now() };
+      if (requireVerifiedAccounts) {
+        assertEmailProvider();
+        const timestamp = Date.now();
+        const active = (state.pendingRegistrations || []).filter(({ expiresAt }) => expiresAt > timestamp);
+        const recent = active.some((record) => record.student.email === email && record.requestedAt > timestamp - EMAIL_VERIFICATION_COOLDOWN);
+        if (!existing && !recent) {
+          if (active.length >= 2000) throw new RequestError(503, "Hay solicitudes pendientes de verificación. Intenta más tarde.");
+          const record = { id: id(), student, requestedAt: timestamp, expiresAt: timestamp + EMAIL_VERIFICATION_TTL };
+          queueAccountEmail("register", email, record.expiresAt, record.id, student.id, { pendingRegistrations: [...active, record] });
+        }
+        return json(res, 202, { emailVerificationRequired: true });
+      }
     } else {
       student = state.students.find((item) => item.email === email && item.salt === salt);
       if (!student || !timingSafeEqual(key, Buffer.from(student.passwordHash, "hex"))) throw new RequestError(401, "El correo o la contraseña no coinciden.");
@@ -1033,6 +1313,7 @@ function createAcademy(dataDir, helpers) {
       if (req.method === "PUT") {
         const body = await readJsonBody(req, 8192);
         checkSession();
+        requireRecentAdmin(admin);
         save({ ...state, plugNmeet: plugNmeet.validate(body) });
         return json(res, 200, { settings: plugNmeet.view() });
       }
@@ -1079,6 +1360,7 @@ function createAcademy(dataDir, helpers) {
       if (req.method !== "PUT") throw new RequestError(404, "Página no encontrada.");
       const body = await readJsonBody(req, 4096);
       if (currentAdmin(req)?.token !== admin.token) throw new RequestError(401, "La sesión ha terminado.");
+      requireRecentAdmin(admin);
       save({ ...state, waha: waha.validate(body) });
       if (!scheduledNotifications) queueMicrotask(runPaymentWhatsApp);
       return json(res, 200, { settings: waha.view() });
@@ -1089,6 +1371,20 @@ function createAcademy(dataDir, helpers) {
       return json(res, 200, result);
     }
     if (route === "/api/admin/academy" && read) return json(res, 200, adminView());
+    if (route === "/api/admin/academy/changes" && read) {
+      const section = new URL(req.url, "http://localhost").searchParams.get("section");
+      return json(res, 200, { token: adminChangeToken(section) });
+    }
+    if (route === "/api/admin/academy/section" && read) {
+      const section = new URL(req.url, "http://localhost").searchParams.get("section");
+      const changeTokens = { [section]: adminChangeToken(section) };
+      if (section === "summary") return json(res, 200, { metrics: adminMetrics(), changeTokens });
+      if (section === "students") return json(res, 200, { students: adminStudents(), changeTokens });
+      if (section === "reviews") return json(res, 200, { reviews: allReviews(), changeTokens });
+      const students = new Map(state.students.map((student) => [student.id, student]));
+      if (section === "payments") return json(res, 200, { orders: adminOrders(students), metrics: adminMetrics(), changeTokens });
+      return json(res, 200, { courseComments: adminComments(students), changeTokens });
+    }
     if (route === "/api/admin/academy/referrals") {
       if (read) return json(res, 200, { settings: referrals.settings() });
       if (req.method !== "PUT") throw new RequestError(404, "Página no encontrada.");
@@ -1202,10 +1498,11 @@ function createAcademy(dataDir, helpers) {
         const sameSubmission = body.submissionId ? body.submissionId === order.submissionId : Boolean(order.receipt && order.receipt === body.receipt);
         if (order.status !== "submitted" || !sameSubmission) throw new RequestError(409, "El aviso de pago cambió o ya fue revisado. Actualiza la lista.");
         if (status === "approved" && !validAsset(order.receipt, "receipt")) throw new RequestError(409, "El comprobante no está disponible. Pide al estudiante que lo adjunte de nuevo.");
+        const reconciliation = status === "approved" ? reconcilePayment(order, body.bankReference) : {};
         const note = status === "rejected" ? requireText(body.note, 500, "Motivo del rechazo", true) : "";
         const timestamp = now();
         const paymentHistoryNext = [...paymentHistory(order), { status, at: timestamp, reviewer: admin.username, note }];
-        saveOrder({ ...order, status, note, reviewedAt: timestamp, updatedAt: timestamp, reviewer: admin.username, paymentHistory: paymentHistoryNext }, status === "approved");
+        saveOrder({ ...order, ...reconciliation, status, note, reviewedAt: timestamp, updatedAt: timestamp, reviewer: admin.username, paymentHistory: paymentHistoryNext }, status === "approved");
         return json(res, 200, adminView());
       }
     }
@@ -1239,13 +1536,17 @@ function createAcademy(dataDir, helpers) {
       const authors = new Map(state.orders.filter((order) => order.review?.status === "approved").map((order) => [order.id, students.get(order.studentId)]));
       const reviews = all.slice(start, start + pageSize).map(({ id, course, name, rating, comment, demo }) => {
         const student = authors.get(id);
-        return { course, name, rating, comment, demo, profile: student ? communityProfile(student, { hasReview: true }) : null };
+        const reviewName = student?.communityProfile?.visibility === "private" ? publicName(student) : name;
+        return { course, name: reviewName, rating, comment, demo, profile: student ? communityProfile(student, { hasReview: true }) : null };
       });
       return json(res, 200, { reviews, nextPage: start + pageSize < all.length ? page + 1 : null });
     }
     const profileRoute = /^\/api\/academy\/profiles\/([a-f0-9]{32})(\/avatar)?$/.exec(route);
     if (read && profileRoute) {
       const student = state.students.find((item) => item.id === profileRoute[1]);
+      if (profileRoute[2] && student?.communityProfile?.visibility === "private" && studentSession(req)?.studentId === student.id) {
+        return sendAsset(req, res, student.communityProfile.avatar, "avatar");
+      }
       const profile = student && communityProfile(student, { publicParticipant: hasPublicParticipation(student) });
       if (!profile?.url) throw new RequestError(404, "Perfil no disponible.");
       if (profileRoute[2]) return sendAsset(req, res, student.communityProfile?.avatar, "avatar");
@@ -1279,6 +1580,16 @@ function createAcademy(dataDir, helpers) {
     if (req.method === "PUT" && ["/api/academy/account", "/api/academy/account/password"].includes(route)) {
       return updateAccount(req, res, route.endsWith("/password"));
     }
+    if (req.method === "POST" && route === "/api/academy/register/verify") return verifyRegistration(req, res);
+    if (req.method === "POST" && route === "/api/academy/account/verify") return verifyAccountEmail(req, res);
+    if (req.method === "POST" && route === "/api/academy/account/verify/request") {
+      const session = requireStudent(req);
+      const student = state.students.find(({ id }) => id === session.studentId);
+      allowAuthAttempt(req, "request-email-verification");
+      if (!requireVerifiedAccounts || student.emailVerifiedAt) return json(res, 200, studentView(session));
+      requestEmailChange(student, student.email);
+      return json(res, 202, studentView(session));
+    }
     if (req.method === "POST" && ["/api/academy/register", "/api/academy/login"].includes(route)) {
       return authenticate(req, res, route.endsWith("/register"));
     }
@@ -1296,6 +1607,7 @@ function createAcademy(dataDir, helpers) {
       if (!offerCategory(offerId)) throw new RequestError(404, "Opción no disponible.");
       const order = findOrder(session.studentId, offerId);
       if (order) return json(res, 200, studentView(session));
+      requireVerifiedEmail(session);
       const offer = lookupOffer(offerId);
       if (!offer?.open) throw new RequestError(409, "El pago de esta opción estará disponible cuando se abran sus inscripciones.");
       const { title, cents, qr, instructions, demo } = offer;
@@ -1306,12 +1618,22 @@ function createAcademy(dataDir, helpers) {
       return json(res, 201, studentView(session));
     }
     const session = requireStudent(req);
-    const resource = /^\/api\/academy\/orders\/([a-f0-9]{32})\/(qr|receipt|paid|discount|lesson(?:\/video)?|chapters(?:\/(legacy|[a-f0-9]{32})\/(?:video|seen))?|live(?:\/(?:player|video|join))?|complete|review|discussion(?:\/(?:heart|comment))?)$/.exec(route);
+    const resource = /^\/api\/academy\/orders\/([a-f0-9]{32})\/(qr|receipt|paid|discount|cancel|lesson(?:\/video)?|chapters(?:\/(legacy|[a-f0-9]{32})\/(?:video|seen))?|live(?:\/(?:player|video|join))?|complete|review|discussion(?:\/(?:heart|comment))?)$/.exec(route);
     const legacyAsset = /^\/api\/academy\/(?:order\/)?(qr|receipt|lesson(?:\/video)?)$/.exec(route);
     if (!resource && !legacyAsset) throw new RequestError(404, "Página no encontrada.");
     const order = resource ? state.orders.find((item) => item.id === resource[1] && item.studentId === session.studentId) : findOrder(session.studentId);
-    if (resource && !order) throw new RequestError(404, "Inscripción no disponible.");
     const action = resource?.[2] ?? legacyAsset?.[1];
+    if (resource && (!order || (order.status === "cancelled" && action !== "cancel"))) {
+      throw new RequestError(404, "Inscripción no disponible.");
+    }
+    if (req.method === "POST" && action === "cancel") {
+      if (order.status === "cancelled") return json(res, 200, studentView(session));
+      if (order.status !== "awaiting_receipt") throw new RequestError(409, "Solo se pueden cancelar inscripciones sin comprobante.");
+      const timestamp = now();
+      saveOrder({ ...order, status: "cancelled", updatedAt: timestamp,
+        paymentHistory: [...paymentHistory(order), { status: "cancelled", at: timestamp }] });
+      return json(res, 200, studentView(session));
+    }
     if (req.method === "PUT" && action === "discount") {
       const body = await readJsonBody(req, 4096);
       const currentSession = requireStudent(req);
@@ -1381,7 +1703,7 @@ function createAcademy(dataDir, helpers) {
       if (current.review) throw new RequestError(409, "Ya enviaste una reseña de este curso.");
       const content = reviewText(body);
       const name = publicName(state.students.find((student) => student.id === currentSession.studentId));
-      saveOrder({ ...current, review: { ...content, name, status: "pending", revision: 0, createdAt: now() } });
+      saveOrder({ ...current, review: { ...content, name, progressSource: "self-reported", status: "pending", revision: 0, createdAt: now() } });
       return json(res, 201, studentView(currentSession));
     }
     if (req.method === "POST" && action === "paid") {
@@ -1389,16 +1711,25 @@ function createAcademy(dataDir, helpers) {
     }
     if (req.method === "POST" && action === "receipt") {
       if (!order || !["awaiting_receipt", "rejected"].includes(order.status)) throw new RequestError(409, "Esta inscripción ya está en revisión o no está disponible.");
+      requireVerifiedEmail(session);
       const expectedTotal = new URL(req.url, "http://localhost").searchParams.get("cents");
       if (expectedTotal !== null && expectedTotal !== String(order.cents)) throw new RequestError(409, "El total cambió. Actualiza la inscripción y verifica el monto antes de adjuntar el comprobante.");
       const bytes = await readBody(req, 8 * MB);
       if (!bytes.length) throw new RequestError(400, "Adjunta un comprobante para enviar el pago a revisión.");
-      const current = findOrder(requireStudent(req).studentId, orderOffer(order));
+      const currentSession = requireStudent(req);
+      requireVerifiedEmail(currentSession);
+      const current = findOrder(currentSession.studentId, orderOffer(order));
       if (current !== order) throw new RequestError(409, "La orden cambió mientras subías el archivo. Recarga la página.");
       const receipt = await storeAsset("receipt", bytes);
-      if (findOrder(requireStudent(req).studentId, orderOffer(order)) !== order) {
+      try {
+        const latestSession = requireStudent(req);
+        requireVerifiedEmail(latestSession);
+        if (findOrder(latestSession.studentId, orderOffer(order)) !== order) {
+          throw new RequestError(409, "La orden cambió mientras subías el archivo. Recarga la página.");
+        }
+      } catch (error) {
         await discardAsset(receipt, "receipt");
-        throw new RequestError(409, "La orden cambió mientras subías el archivo. Recarga la página.");
+        throw error;
       }
       const timestamp = now();
       const paymentHistoryNext = [...paymentHistory(order), { status: "submitted", at: timestamp }];
@@ -1431,6 +1762,7 @@ function createAcademy(dataDir, helpers) {
       if (action !== "live") throw new RequestError(404, "Video no disponible.");
       const link = offer?.liveUrl;
       if (!link) throw new RequestError(404, "No hay enlace de transmisión.");
+      res.setHeader("Referrer-Policy", "no-referrer");
       res.writeHead(303, { Location: link });
       return res.end();
     }
@@ -1473,7 +1805,7 @@ function createAcademy(dataDir, helpers) {
     })),
   });
 
-  return { handle, seedDemoCourses, seedDemoStudent, startPaymentNotifications, runPaymentNotifications };
+  return { handle, seedDemoCourses, seedDemoStudent, startPaymentNotifications, runPaymentNotifications, runAccountNotifications };
 }
 
 module.exports = { createAcademy };

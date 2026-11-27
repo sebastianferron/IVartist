@@ -8,6 +8,7 @@ const path = require("node:path");
 const { createECDH, createHmac, randomBytes, randomUUID } = require("node:crypto");
 const { once } = require("node:events");
 const { createServer, createAdmin } = require("./server");
+const { stripPhotoMetadata } = require("./academy-photo");
 const { generateRequestDetails } = require("web-push");
 
 test("un estudiante entra al aula solo después de la aprobación manual de su comprobante", async () => {
@@ -78,7 +79,12 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
   const update = (route, body, cookie = admin) => send(route, { method: "PUT", body, cookie });
   const sessionCookie = (response) => response.headers.get("set-cookie").split(";")[0];
   const image = fs.readFileSync(path.join(__dirname, "assets", "hero-purple.jpeg"));
-  const video = Buffer.from("0000ftypisom000000000000", "ascii");
+  const video = Buffer.from("000000146674797069736f6d0000000069736f6d000000086d646174", "hex");
+  const metadata = Buffer.from("Metadato privado de prueba");
+  const jpegComment = Buffer.alloc(4);
+  jpegComment.writeUInt16BE(0xfffe);
+  jpegComment.writeUInt16BE(metadata.length + 2, 2);
+  const imageWithMetadata = Buffer.concat([image.subarray(0, 2), jpegComment, metadata, image.subarray(2)]);
 
   try {
     await start();
@@ -115,6 +121,9 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     const qrFile = await upload("/api/admin/academy/qr", image);
     assert.equal(qrFile.status, 201);
     const qr = (await qrFile.json()).id;
+    const invalidVideo = Buffer.from(video);
+    invalidVideo.writeUInt32BE(video.length + 4);
+    assert.equal((await upload("/api/admin/academy/video", invalidVideo)).status, 415);
     const videoFile = await upload("/api/admin/academy/video", video);
     assert.equal(videoFile.status, 201);
     const videoId = (await videoFile.json()).id;
@@ -157,7 +166,7 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     const postForm = new FormData();
     postForm.set("requestId", randomUUID());
     postForm.set("text", "Mi práctica de maquillaje.");
-    postForm.append("photos", new Blob([image], { type: "image/jpeg" }), "look.jpg");
+    postForm.append("photos", new Blob([imageWithMetadata], { type: "image/jpeg" }), "look.jpg");
     assert.equal((await upload("/api/academy/feed", postForm, secondStudent)).status, 201);
     const { posts: [post] } = await (await send("/api/academy/feed")).json();
     assert.equal(post.author.name, "Otra");
@@ -170,7 +179,9 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     const { profile: participantProfile } = await (await send(feedProfile)).json();
     assert.equal(participantProfile.displayName, "Otra");
     assert.ok(!Object.hasOwn(participantProfile, "email"));
-    assert.equal((await send(post.photos[0])).status, 200);
+    const postPhoto = await send(post.photos[0]);
+    assert.equal(postPhoto.status, 200);
+    assert.ok(!Buffer.from(await postPhoto.arrayBuffer()).includes(metadata));
     assert.equal((await upload("/api/academy/feed", postForm, secondStudent)).status, 200);
     assert.equal((await (await send("/api/academy/feed")).json()).posts.length, 1);
     const postPath = `/api/academy/feed/posts/${post.id}`;
@@ -216,6 +227,17 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     assert.equal(lastPage.next, null);
     for (const id of pagedPosts) {
       assert.equal((await send(`/api/academy/feed/posts/${id}`, { method: "DELETE", cookie: secondStudent })).status, 200);
+    }
+    for (let index = 0; index < 3; index += 1) {
+      const fields = new FormData();
+      fields.set("requestId", randomUUID());
+      fields.set("text", "Publicación para comprobar el límite diario");
+      const result = await upload("/api/academy/feed", fields, secondStudent);
+      assert.equal(result.status, index < 2 ? 201 : 429);
+      if (result.ok) {
+        const { post: saved } = await result.json();
+        assert.equal((await send(`/api/academy/feed/posts/${saved.id}`, { method: "DELETE", cookie: secondStudent })).status, 200);
+      }
     }
 
     const { key } = await (await send("/api/academy/notifications/key", { cookie: student })).json();
@@ -263,9 +285,11 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     assert.equal((await upload("/api/academy/order/receipt", image, student)).status, 200);
     assert.equal((await update(reviewRoute, { decision: "approved", receipt: adminState.orders[0].receipt })).status, 409);
     const next = await (await send("/api/admin/academy", { cookie: admin })).json();
-    const approval = await update(reviewRoute, { decision: "approved", receipt: next.orders[0].receipt });
+    assert.equal((await update(reviewRoute, { decision: "approved", receipt: next.orders[0].receipt })).status, 400);
+    const approval = await update(reviewRoute, { decision: "approved", receipt: next.orders[0].receipt, bankReference: "Banco 123-456" });
     assert.equal(approval.status, 200);
     const afterApproval = await approval.json();
+    assert.equal(afterApproval.orders[0].bankReference, "BANCO123456");
     assert.equal(afterApproval.metrics.monthCents, 11950);
     assert.deepEqual(afterApproval.orders[0].paymentHistory.map(({ status }) => status), ["awaiting_receipt", "submitted", "rejected", "submitted", "approved"]);
     assert.equal((await update(reviewRoute, { decision: "approved", receipt: next.orders[0].receipt })).status, 409);
@@ -376,8 +400,10 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     assert.ok(pending.submissionId);
     assert.equal((await upload(`${liveRoute}/paid`, {}, student)).status, 400);
     assert.equal((await getReview(liveOrder.id)).submissionId, pending.submissionId);
-    const confirm = (id, submissionId) => update(`/api/admin/academy/orders/${id}`, { decision: "approved", submissionId });
+    const confirm = (id, submissionId, bankReference = `Banco-${id}`) =>
+      update(`/api/admin/academy/orders/${id}`, { decision: "approved", submissionId, bankReference });
     assert.equal((await confirm(liveOrder.id, "revisión anterior")).status, 409);
+    assert.equal((await confirm(liveOrder.id, pending.submissionId, "banco/123 456")).status, 409);
     assert.equal((await confirm(liveOrder.id, pending.submissionId)).status, 200);
     const liveAccess = await send(`${liveRoute}/live`, { cookie: student });
     assert.equal(liveAccess.status, 303);
@@ -425,7 +451,7 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     profileForm.set("tiktok", "ivanna_prueba");
     profileForm.set("youtube", "@maquillajeñ");
     profileForm.set("specialty", "Maquillaje editorial");
-    profileForm.set("avatar", new Blob([image], { type: "image/jpeg" }), "foto.jpg");
+    profileForm.set("avatar", new Blob([imageWithMetadata], { type: "image/jpeg" }), "foto.jpg");
     const anonymousSave = await send("/api/academy/profile", { method: "POST", body: profileForm });
     assert.equal(anonymousSave.status, 401);
     const invalidHandle = new FormData();
@@ -447,7 +473,24 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     const avatar = await send(profile.avatar);
     assert.equal(avatar.status, 200);
     assert.equal(avatar.headers.get("content-type"), "image/jpeg");
-    assert.deepEqual(Buffer.from(await avatar.arrayBuffer()), image);
+    const cleanPhoto = stripPhotoMetadata(image, "jpg");
+    assert.deepEqual(Buffer.from(await avatar.arrayBuffer()), cleanPhoto);
+    const avatarFile = new URL(profile.avatar, origin).searchParams.get("v");
+    const avatarPath = path.join(dataDir, "academy-media", avatarFile);
+    assert.deepEqual(fs.readFileSync(avatarPath), cleanPhoto);
+    fs.writeFileSync(avatarPath, imageWithMetadata);
+    assert.deepEqual(Buffer.from(await (await send(profile.avatar)).arrayBuffer()), cleanPhoto);
+    const privateProfile = new FormData();
+    privateProfile.set("visibility", "private");
+    assert.equal((await upload("/api/academy/profile", privateProfile, student)).status, 200);
+    assert.equal((await send(profileApi)).status, 404);
+    assert.equal((await send(profile.avatar, { cookie: other })).status, 404);
+    assert.equal((await send(profile.avatar, { cookie: student })).status, 200);
+    assert.deepEqual((await publicReviews())[0].profile, { name: "Estudiante", displayName: "Estudiante", socials: [], url: null, avatar: null });
+    profileForm.set("visibility", "public");
+    profileForm.delete("avatar");
+    assert.equal((await upload("/api/academy/profile", profileForm, student)).status, 200);
+    assert.deepEqual((await (await send(profileApi)).json()).profile, profile);
     const otherProfile = new FormData();
     otherProfile.set("studentId", generic.url.split("/").at(-1));
     otherProfile.set("facebook", "otro.participante");
@@ -519,7 +562,7 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     assert.equal((await send(coverUrl)).status, 404);
     assert.equal((await send(`/api/admin/academy/image/${cover}`, { cookie: admin })).status, 200);
     assert.equal((await send(`/api/admin/academy/image/${cover}`)).status, 401);
-    const secondVideo = Buffer.from("0000ftypisomsegundo-video", "ascii");
+    const secondVideo = Buffer.concat([video.subarray(0, 20), Buffer.from("000000096d64617401", "hex")]);
     const secondVideoId = (await (await upload("/api/admin/academy/video", secondVideo)).json()).id;
     const series = { ...extra, title: "Automaquillaje", cover, chapters: [
       { title: "Preparación", text: "Preparar la piel", video: videoId },
@@ -677,7 +720,16 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
       return (await result.json()).orders.find((item) => item.offerId === offerId);
     }
     const routeFor = (order, action) => `/api/academy/orders/${order.id}/${action}`;
+    const abandonedOrder = await createOrder("esencial", invited);
+    assert.equal(abandonedOrder.discount.kind, "invite");
+    assert.equal((await upload(routeFor(abandonedOrder, "cancel"), undefined, student)).status, 404);
+    const cancelled = await upload(routeFor(abandonedOrder, "cancel"), undefined, invited);
+    assert.equal(cancelled.status, 200);
+    assert.equal((await cancelled.json()).referrals.welcomePercent, 20);
+    assert.equal((await send(routeFor(abandonedOrder, "qr"), { cookie: invited })).status, 404);
+    assert.equal((await upload(routeFor(abandonedOrder, "cancel"), undefined, invited)).status, 200);
     const discountedOrder = await createOrder("esencial", invited);
+    assert.notEqual(discountedOrder.id, abandonedOrder.id);
     assert.equal(discountedOrder.cents, 9560);
     assert.equal(discountedOrder.discount.kind, "invite");
     const secondInviteOrder = await createOrder("live", invited);
@@ -689,11 +741,13 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     assert.equal((await update(routeFor(discountedOrder, "discount"), { kind: "invite" }, invited)).status, 200);
     assert.equal((await upload(`${routeFor(discountedOrder, "receipt")}?cents=11950`, image, invited)).status, 409);
     assert.equal((await upload(`${routeFor(discountedOrder, "receipt")}?cents=9560`, image, invited)).status, 200);
+    assert.equal((await upload(routeFor(discountedOrder, "cancel"), undefined, invited)).status, 409);
+    assert.equal((await upload(routeFor(secondInviteOrder, "receipt"), image, invited)).status, 200);
+    assert.equal((await confirm(secondInviteOrder.id, (await getReview(secondInviteOrder.id)).submissionId)).status, 409);
     assert.equal((await update(routeFor(discountedOrder, "discount"), { kind: "remove" }, invited)).status, 409);
     assert.equal((await (await send("/api/academy", { cookie: secondStudent })).json()).referrals.rewardCount, 0);
     assert.equal((await confirm(discountedOrder.id, (await getReview(discountedOrder.id)).submissionId)).status, 200);
     assert.equal((await update(routeFor(secondInviteOrder, "discount"), { kind: "invite" }, invited)).status, 409);
-    assert.equal((await upload(routeFor(secondInviteOrder, "receipt"), image, invited)).status, 200);
     assert.equal((await confirm(secondInviteOrder.id, (await getReview(secondInviteOrder.id)).submissionId)).status, 200);
     const earned = (await (await send("/api/academy", { cookie: secondStudent })).json()).referrals;
     assert.equal(earned.rewardCount, 1);
@@ -761,8 +815,10 @@ test("un estudiante entra al aula solo después de la aprobación manual de su c
     const waha = "/api/admin/academy/waha";
     const wahaSettings = { enabled: true, address: "https://waha.example.com", apiKey: "waha-test-key", recipient: "+591 70000000", session: "default", siteUrl: "https://ivanna.example.com", attachReceipt: true };
     assert.equal((await send(waha, { cookie: student })).status, 401);
+    assert.equal((await (await send(waha, { cookie: admin })).json()).settings.attachReceipt, false);
     assert.equal((await update(waha, { ...wahaSettings, address: "https://127.0.0.1" })).status, 400);
-    const wahaSaved = await update(waha, wahaSettings);
+    assert.equal((await update(waha, wahaSettings)).status, 400);
+    const wahaSaved = await update(waha, { ...wahaSettings, confirmDelivery: true });
     assert.equal(wahaSaved.status, 200);
     const { settings: wahaView } = await wahaSaved.json();
     assert.equal(wahaView.apiKey, undefined);

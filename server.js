@@ -4,17 +4,20 @@ const http = require("node:http");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { createHash, randomBytes, scryptSync, timingSafeEqual } = require("node:crypto");
+const { createHash, randomBytes, scrypt, scryptSync, timingSafeEqual } = require("node:crypto");
+const { promisify } = require("node:util");
 const { createInterface } = require("node:readline");
 const { Writable } = require("node:stream");
 const { defaults, fields, photos, uploadPattern, mergeHomeConfig, parseSocialClip, normalizeWhatsAppNumber, normalizeSectionOrder } = require("./home-config");
 const { createAcademy } = require("./academy-server");
-const { createPaymentMailer } = require("./academy-mail");
+const { createAccountMailer, createPaymentMailer } = require("./academy-mail");
 const { localMedia } = require("./academy-media");
+const { decodeTotpSecret, acceptedTotp } = require("./academy-auth");
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".webmanifest": "application/manifest+json; charset=utf-8", ".jpeg": "image/jpeg", ".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".ico": "image/x-icon", ".svg": "image/svg+xml" };
 const SESSION_AGE = 8 * 60 * 60 * 1000;
 const RETRY_WINDOW = 15 * 60 * 1000;
+const passwordKey = promisify(scrypt);
 const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
 const contentPolicy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 const DEFAULT_DATA_DIR = process.env.IVANNA_DATA_DIR || path.join(process.env.LOCALAPPDATA || os.homedir(), "IvannaMakeupAcademy");
@@ -166,7 +169,7 @@ function validateConfig(config, uploads) {
 
 function createAdmin(username, password, dataDir = DEFAULT_DATA_DIR, { superadmin = false } = {}) {
   if (!/^[a-z\d._@-]{3,80}$/i.test(username)) throw new Error("Indica un usuario de entre 3 y 80 caracteres.");
-  if (password.length < 6 || password.length > 128) throw new Error("La contraseña debe tener entre 6 y 128 caracteres.");
+  if (password.length < 14 || password.length > 128) throw new Error("La contraseña debe tener entre 14 y 128 caracteres.");
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const file = path.join(dataDir, "admin.json");
   const normalizedUsername = username.toLowerCase();
@@ -199,6 +202,8 @@ function readPassword() {
 function createApplication({
   dataDir = DEFAULT_DATA_DIR, sendPaymentEmail = createPaymentMailer(), sendPush, plugNmeetTransport, wahaTransport,
   publicOrigin = process.env.IVANNA_PUBLIC_ORIGIN, documents, media, pages, playbackSecret, pushContact,
+  sendAccountEmail = createAccountMailer(), verificationSecret = process.env.IVANNA_EMAIL_VERIFICATION_KEY,
+  adminTotpSecret = process.env.IVANNA_ADMIN_TOTP_SECRET, requireAdminMfa = process.env.IVANNA_REQUIRE_ADMIN_MFA === "1", checkpointNotifications,
 } = {}) {
   const external = publicOrigin ? new URL(publicOrigin) : null;
   if (external && (external.protocol !== "https:" || external.href !== `${external.origin}/`)) {
@@ -212,6 +217,8 @@ function createApplication({
   const adminSessionFile = path.join(dataDir, "admin-sessions.json");
   const account = readDocument(adminFile, null);
   const accountRole = account?.role === "superadmin" ? "superadmin" : "admin";
+  const totpSecret = decodeTotpSecret(adminTotpSecret);
+  const dummySalt = randomBytes(16).toString("hex");
 
   let state = readDocument(stateFile, { revision: 0, published: defaults, draft: defaults, updatedAt: null, publishedAt: null });
   for (const version of ["published", "draft"]) {
@@ -226,12 +233,13 @@ function createApplication({
   }
   const access = documents ? readDocument(adminSessionFile, null) : null;
   const digest = (value) => createHash("sha256").update(value).digest("hex");
-  const credentialVersion = account ? digest(`${account.username}:${account.passwordHash}`) : "";
+  const credentialVersion = account ? digest(`${account.username}:${account.passwordHash}:${accountRole}:${totpSecret?.toString("hex") || ""}`) : "";
   const sameCredentials = access?.credentialVersion === credentialVersion;
-  const sessions = new Map(sameCredentials ? access.sessions : []);
-  let failures = sameCredentials ? access.failures : [];
+  const sessions = new Map(sameCredentials ? access.sessions || [] : []);
+  const adminAttempts = new Map(sameCredentials ? access.attempts || [] : []);
+  let totpStep = sameCredentials ? access.totpStep || 0 : 0;
   function persistAdminAccess() {
-    if (documents) writeDocument(adminSessionFile, { credentialVersion, sessions: [...sessions], failures });
+    if (documents) writeDocument(adminSessionFile, { credentialVersion, sessions: [...sessions], attempts: [...adminAttempts], totpStep });
   }
 
   function currentSession(req) {
@@ -253,21 +261,26 @@ function createApplication({
     const now = Date.now();
     for (const [token, session] of sessions) if (session.expires <= now) sessions.delete(token);
     const token = randomBytes(32).toString("hex");
-    sessions.set(digest(token), { username: account.username, role: accountRole, expires: now + SESSION_AGE });
+    sessions.set(digest(token), { username: account.username, role: accountRole, authenticatedAt: now, expires: now + SESSION_AGE });
     persistAdminAccess();
     const secure = req.ivannaSecure ? "; Secure" : "";
     res.setHeader("Set-Cookie", `ivanna_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_AGE / 1000}${secure}`);
   }
 
   function handleFailure() {
-    failures.push(Date.now());
-    persistAdminAccess();
     throw new RequestError(401, "Los datos de acceso no coinciden.");
   }
 
-  function checkRateLimit() {
-    failures = failures.filter((time) => time > Date.now() - RETRY_WINDOW);
-    if (failures.length >= 6) throw new RequestError(429, "Demasiados intentos. Espera unos minutos antes de volver a intentar.");
+  function reserveAdminAttempt(req) {
+    const timestamp = Date.now();
+    const key = digest(req.socket?.remoteAddress || "unknown");
+    for (const [source, attempt] of adminAttempts) if (attempt.until <= timestamp) adminAttempts.delete(source);
+    const attempt = adminAttempts.get(key) || { until: timestamp + RETRY_WINDOW, count: 0 };
+    if (attempt.count >= 6) throw new RequestError(429, "Demasiados intentos desde esta conexión. Espera unos minutos.");
+    if (!adminAttempts.has(key) && adminAttempts.size >= 1000) adminAttempts.delete(adminAttempts.keys().next().value);
+    adminAttempts.set(key, { ...attempt, count: attempt.count + 1 });
+    persistAdminAccess();
+    return key;
   }
 
   function json(res, status, data) {
@@ -290,7 +303,8 @@ function createApplication({
   const academy = createAcademy(dataDir, {
     RequestError, readJsonFile: readDocument, writeJsonFile: writeDocument, readJsonBody, readBody, photoExtension, json, currentAdmin: currentSession,
     publishedHome: () => state.published, sendPaymentEmail, sendPush, plugNmeetTransport, wahaTransport, publicOrigin: external?.origin,
-    scheduledNotifications: Boolean(documents), academyMedia: media?.academy, playbackSecret, pushContact,
+    scheduledNotifications: Boolean(documents), academyMedia: media?.academy, playbackSecret, pushContact, checkpointNotifications,
+    sendAccountEmail, verificationSecret, requireVerifiedAccounts: Boolean(external || sendAccountEmail),
   });
 
   async function handle(req, res) {
@@ -330,12 +344,19 @@ function createApplication({
         return await academy.handle(req, res, route, read, session);
       }
       if (req.method === "POST" && route === "/api/admin/login") {
-        checkRateLimit();
-        const { username, password } = await readJsonBody(req) ?? {};
-        if (!account || typeof username !== "string" || typeof password !== "string" || password.length > 128) handleFailure();
-        const hash = scryptSync(password, account.salt, 64);
-        if (!timingSafeEqual(hash, Buffer.from(account.passwordHash, "hex")) || username.trim().toLowerCase() !== account.username) handleFailure();
-        failures = [];
+        const { username, password, totp } = await readJsonBody(req, 2048) ?? {};
+        if (requireAdminMfa && !totpSecret) throw new RequestError(503, "El acceso administrativo requiere configurar el segundo factor.");
+        const source = reserveAdminAttempt(req);
+        if (typeof username !== "string" || username.length > 80 || typeof password !== "string" || password.length > 128) handleFailure();
+        const selected = username.trim().toLowerCase() === account?.username ? account : null;
+        const hash = await passwordKey(password, selected?.salt || dummySalt, 64);
+        if (!selected || !timingSafeEqual(hash, Buffer.from(selected.passwordHash, "hex"))) handleFailure();
+        if (totpSecret) {
+          const step = acceptedTotp(totpSecret, totp, totpStep);
+          if (step === null) handleFailure();
+          totpStep = step;
+        }
+        adminAttempts.delete(source);
         setSession(res, req, session);
         return json(res, 200, { username: account.username, role: accountRole });
       }
@@ -384,10 +405,16 @@ function createApplication({
         if (!uploadPattern.test(id) || (!session && !published) || !uploads.exists(id)) {
           throw new RequestError(404, "Foto no disponible.");
         }
+        if (head) {
+          const length = await uploads.size(id);
+          if (!Number.isSafeInteger(length)) throw new RequestError(404, "Foto no disponible.");
+          res.writeHead(200, { "Content-Type": MIME[path.extname(id)], "Content-Length": length });
+          return res.end();
+        }
         const bytes = await uploads.read(id);
         if (!bytes) throw new RequestError(404, "Foto no disponible.");
         res.writeHead(200, { "Content-Type": MIME[path.extname(id)], "Content-Length": bytes.length });
-        return res.end(head ? undefined : bytes);
+        return res.end(bytes);
       }
       if (read && staticFiles.has(route)) {
         if ((route === "/" || route === "/index.html") && isPreview && !session) return redirect(res, "/admin/login");
@@ -396,12 +423,13 @@ function createApplication({
       }
       throw new RequestError(404, "Página no encontrada.");
     } catch (error) {
+      if (!res.headersSent && req.ivannaBodyDeadline?.aborted) return json(res, 408, { error: "El plazo para enviar el formulario terminó." });
       if (!(error instanceof RequestError)) console.error(error);
       if (!res.headersSent) json(res, error.status || 500, { error: error.status ? error.message : "Ocurrió un error al completar la operación." });
       else res.end();
     }
   }
-  return { handle, runPaymentNotifications: academy.runPaymentNotifications, startPaymentNotifications: academy.startPaymentNotifications };
+  return { handle, runPaymentNotifications: academy.runPaymentNotifications, runAccountNotifications: academy.runAccountNotifications, startPaymentNotifications: academy.startPaymentNotifications };
 }
 
 function createServer(options) {
