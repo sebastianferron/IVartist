@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#13080f" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/app-192.png" />
+    <title>Mi espacio · Ivanna Saldaña · Makeup Artist</title>
+    <link rel="icon" href="/favicon.ico?v=6ccb322a" sizes="16x16 32x32 48x48" />
+    <link rel="stylesheet" href="/admin.css" />
+    <link rel="stylesheet" href="/academy.css" />
+    <link rel="stylesheet" href="/profile.css" />
+    <link rel="stylesheet" href="/academy-payment.css" />
+    <link rel="stylesheet" href="/navigation.css" />
+    <link rel="stylesheet" href="/academy-shell.css" />
+    <link rel="stylesheet" href="/app-notifications.css" />
+    <link rel="stylesheet" href="/academy-ranking.css" />
+    <script src="/academy-payment.js" defer></script>
+    <script src="/academy-discussion.js" defer></script>
+    <script src="/profile.js" defer></script>
+    <script src="/academy-ranking.js" defer></script>
+    <script src="/academy-feed.js" defer></script>
+    <script src="/app-notifications.js" defer></script>
+    <script src="/academy.js" defer></script>
+    <script src="/navigation.js" defer></script>
+  </head>
+  <body class="academy-page">
+    <header class="academy-header" data-sticky-header>
+      <a class="wordmark" href="/">
+        <span class="wordmark__logo" aria-hidden="true"><img src="/assets/logo-iv.png" alt="" /></span>
+        <span class="wordmark__name">Ivanna Saldaña <small>Makeup Artist</small></span>
+      </a>
+      <div class="academy-header__actions">
+        <a class="back-link" href="/">Volver a la portada</a>
+        <a class="academy-quick-link" href="#feed">Feed</a>
+        <a class="academy-quick-link" href="#shop">Shop</a>
+        <div id="site-notification-slot"></div>
+        <a class="academy-account" id="student-account" href="#perfil" aria-label="Mi perfil" title="Mi perfil" hidden>
+          <img class="profile-avatar" id="student-account-avatar" src="/assets/avatar-generico.svg" alt="" />
+        </a>
+        <button class="admin-secondary" id="student-logout" type="button" hidden>Cerrar sesión</button>
+      </div>
+    </header>
+    <main class="academy-main">
+      <div class="academy-intro">
+        <h1>Mi espacio</h1>
+        <p id="academy-message" role="status">Cargando tu espacio…</p>
+      </div>
+      <details class="academy-panel profile-editor" id="perfil" hidden>
+        <summary><img class="profile-avatar" id="profile-summary-avatar" src="/assets/avatar-generico.svg" alt="" /> Mi perfil</summary>
+        <form id="student-account-form" class="profile-editor__account" method="post" action="/api/academy/account" aria-labelledby="student-account-title">
+          <h3 id="student-account-title">Datos de mi cuenta</h3>
+          <div class="profile-editor__account-fields">
+            <label>Nombre completo
+              <input name="name" type="text" autocomplete="name" maxlength="100" required />
+            </label>
+            <label>Correo electrónico
+              <input name="email" type="email" autocomplete="email" maxlength="160" required />
+            </label>
+            <label>WhatsApp
+              <input name="whatsapp" type="tel" autocomplete="tel" maxlength="32" placeholder="+591 70000000" aria-describedby="account-phone-help" />
+              <small id="account-phone-help">Incluye el código de país.</small>
+            </label>
+            <label id="account-confirm-email" hidden>Contraseña actual para cambiar el correo
+              <input name="currentPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" disabled />
+            </label>
+          </div>
+          <button class="admin-primary" type="submit">Guardar mis datos</button>
+          <p class="profile-editor__status" id="student-account-status" role="status"></p>
+        </form>
+        <details class="profile-editor__password" id="profile-password">
+          <summary>Cambiar contraseña</summary>
+          <form id="student-password-form" method="post" action="/api/academy/account/password">
+            <div class="profile-editor__account-fields">
+              <label>Contraseña actual
+                <input name="currentPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" required />
+              </label>
+              <label>Nueva contraseña
+                <input name="newPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" aria-describedby="password-length" required />
+                <small id="password-length">Al menos 10 caracteres.</small>
+              </label>
+              <label>Repite la nueva contraseña
+                <input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required />
+              </label>
+            </div>
+            <label class="profile-editor__password-toggle"><input name="showPasswords" type="checkbox" /> Mostrar contraseñas</label>
+            <button class="admin-primary" type="submit">Actualizar contraseña</button>
+            <p class="profile-editor__status" id="student-password-status" role="status"></p>
+          </form>
+        </details>
+        <section id="referidos" class="profile-referrals" aria-labelledby="profile-referrals-title" hidden>
+          <h3 id="profile-referrals-title">Mis referidos</h3>
+          <p id="profile-referrals-welcome" hidden></p>
+          <p id="profile-referrals-earned" hidden></p>
+          <div id="profile-referrals-share" hidden>
+            <p id="profile-referral-plan"></p>
+            <form id="profile-referral-form" method="post" action="/api/academy/referrals/code">
+              <label>Mi código de invitación
+                <input id="profile-referral-code" name="code" type="text" required minlength="4" maxlength="24" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-describedby="profile-referral-code-help" />
+              </label>
+              <button class="admin-primary" type="submit">Guardar código</button>
+              <small id="profile-referral-code-help">Usa de 4 a 24 letras, números o guiones. Los enlaces que ya compartiste seguirán apuntando a tu cuenta.</small>
+              <p class="profile-editor__status" id="profile-referral-code-status" role="status"></p>
+            </form>
+            <label>Enlace de invitación <input id="profile-referral-link" type="url" readonly /></label>
+            <button class="admin-secondary" type="button" id="copy-referral-link">Copiar enlace</button>
+          </div>
+          <p id="profile-referrals-status" class="profile-editor__status" role="status"></p>
+        </section>
+        <form id="student-profile-form" method="post" action="/api/academy/profile" enctype="multipart/form-data">
+          <h3>Perfil público</h3>
+          <p class="profile-editor__note">Tu perfil público muestra tu nombre, especialidad, foto y redes sociales.</p>
+          <label>Especialidad
+            <input type="text" name="specialty" maxlength="100" placeholder="Ej. Maquillaje editorial y artístico" />
+          </label>
+          <div class="profile-editor__photo">
+            <img class="profile-avatar" id="student-profile-avatar" src="/assets/avatar-generico.svg" alt="Vista previa de tu foto de perfil" />
+            <label>Foto de perfil
+              <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="profile-photo-help" />
+              <small id="profile-photo-help">JPG, PNG o WebP de hasta 5 MB.</small>
+            </label>
+            <button class="admin-secondary" id="remove-profile-avatar" type="button" hidden>Quitar foto</button>
+            <input name="removeAvatar" type="hidden" value="" />
+          </div>
+          <div class="profile-editor__socials">
+            <label>Instagram <input type="text" name="instagram" placeholder="@usuario" maxlength="31" autocapitalize="off" spellcheck="false" /></label>
+            <label>TikTok <input type="text" name="tiktok" placeholder="@usuario" maxlength="25" autocapitalize="off" spellcheck="false" /></label>
+            <label>Facebook <input type="text" name="facebook" placeholder="usuario" maxlength="51" autocapitalize="off" spellcheck="false" /></label>
+            <label>YouTube <input type="text" name="youtube" placeholder="@usuario" maxlength="61" autocapitalize="off" spellcheck="false" /></label>
+          </div>
+          <div class="profile-editor__actions">
+            <button class="admin-primary" id="save-student-profile" type="submit">Guardar perfil</button>
+            <a class="academy-text-button" id="view-public-profile" target="_blank" rel="noopener" hidden>Ver perfil público ↗</a>
+          </div>
+          <p class="profile-editor__status" id="student-profile-status" role="status"></p>
+        </form>
+      </details>
+      <section class="academy-panel academy-payment-alerts" id="avisos-de-pago" aria-labelledby="payment-alerts-title" hidden>
+        <header>
+          <h2 id="payment-alerts-title">Avisos de inscripción</h2>
+        </header>
+        <p id="student-approval-alert" class="academy-screen-reader" role="status"></p>
+        <ul id="student-payment-alerts"></ul>
+      </section>
+      <h2 class="academy-courses-title" id="mis-cursos" hidden>Mis cursos</h2>
+      <div class="academy-columns">
+        <section id="student-access" class="academy-panel" aria-labelledby="student-access-title" hidden>
+          <h2 id="student-access-title">Iniciar sesión</h2>
+          <form id="student-auth" method="post" action="/api/academy/login">
+            <label>Correo electrónico
+              <input name="email" type="email" autocomplete="username" maxlength="160" required />
+            </label>
+            <label>Contraseña
+              <input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="128" required />
+            </label>
+            <button id="student-submit" class="admin-primary" type="submit">Entrar</button>
+          </form>
+          <a class="academy-text-button" href="/#comunidad">Crear mi cuenta</a>
+        </section>
+      </div>
+      <div id="student-orders" class="academy-columns academy-orders"></div>
+      <section id="student-lesson" class="academy-panel academy-lesson" aria-labelledby="lesson-title" hidden>
+        <h2 id="lesson-title" tabindex="-1"></h2>
+        <nav id="lesson-chapters" class="lesson-chapters" aria-label="Capítulos" hidden>
+          <ol></ol>
+        </nav>
+        <h3 id="lesson-chapter-title" tabindex="-1"></h3>
+        <div class="academy-player" id="lesson-player" hidden>
+          <div class="academy-player__screen">
+            <video id="lesson-video" controls controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture disableremoteplayback playsinline preload="metadata"></video>
+            <span class="academy-player__watermark" id="lesson-watermark"></span>
+            <button class="academy-player__start" id="lesson-start" type="button" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+              <span>Iniciar curso</span>
+            </button>
+          </div>
+          <button class="admin-secondary academy-player__fullscreen" id="lesson-fullscreen" type="button" hidden>Pantalla completa</button>
+        </div>
+        <p id="lesson-video-status" role="status"></p>
+        <p id="lesson-text" class="academy-prose"></p>
+        <div class="lesson-completion" id="lesson-completion" hidden>
+          <p id="chapter-completed" class="academy-progress-label" hidden></p>
+          <button class="admin-secondary" id="complete-reading" type="button" hidden>Marcar lectura como vista</button>
+          <p id="chapter-progress-feedback" role="status"></p>
+          <button class="admin-secondary" id="retry-chapter-progress" type="button" hidden>Reintentar guardado</button>
+          <p id="course-completed" class="academy-progress-label" role="status" hidden>Curso finalizado.</p>
+        </div>
+        <div class="lesson-participation__bar">
+          <div class="lesson-participation__choices" role="group" aria-label="Participación en el curso">
+            <button class="admin-secondary" id="course-comments-toggle" type="button" aria-expanded="true" aria-controls="course-discussion">Comentarios</button>
+            <button class="admin-secondary" id="course-review-toggle" type="button" aria-expanded="false" aria-controls="course-review-panel" hidden>Reseña</button>
+          </div>
+          <button class="course-heart" id="course-heart" type="button" aria-label="Me gusta el curso" aria-pressed="false" disabled>
+            <span class="course-heart__icon" aria-hidden="true">♡</span>
+            <span id="course-heart-count" aria-live="polite">0</span>
+          </button>
+        </div>
+        <section class="lesson-participation__panel" id="course-review-panel" aria-labelledby="course-review-toggle" hidden>
+          <form class="course-review-form" id="course-review-form" hidden>
+            <h3 id="review-form-title" tabindex="-1">Escribe tu reseña</h3>
+            <fieldset>
+              <legend>Calificación de 1 a 5 estrellas</legend>
+              <div class="review-rating">
+                <label><input type="radio" name="rating" value="1" required /><span aria-hidden="true">★</span><span class="review-rating__label">1 estrella</span></label>
+                <label><input type="radio" name="rating" value="2" /><span aria-hidden="true">★</span><span class="review-rating__label">2 estrellas</span></label>
+                <label><input type="radio" name="rating" value="3" /><span aria-hidden="true">★</span><span class="review-rating__label">3 estrellas</span></label>
+                <label><input type="radio" name="rating" value="4" /><span aria-hidden="true">★</span><span class="review-rating__label">4 estrellas</span></label>
+                <label><input type="radio" name="rating" value="5" /><span aria-hidden="true">★</span><span class="review-rating__label">5 estrellas</span></label>
+              </div>
+            </fieldset>
+            <label>¿Cómo fue tu experiencia?
+              <textarea name="comment" rows="4" maxlength="750" required></textarea>
+            </label>
+            <p>Si se aprueba, tu reseña aparecerá en la portada junto con tu perfil.</p>
+            <button class="admin-primary" type="submit">Enviar reseña</button>
+          </form>
+          <p id="review-feedback" role="status"></p>
+        </section>
+        <section class="course-discussion" id="course-discussion" aria-labelledby="course-discussion-title" hidden>
+          <h3 id="course-discussion-title" class="academy-screen-reader">Comentarios del curso</h3>
+          <form id="course-comment-form">
+            <label for="course-comment-text">Deja un comentario</label>
+            <textarea id="course-comment-text" name="comment" rows="3" maxlength="750" required aria-describedby="course-comment-help"></textarea>
+            <p id="course-comment-help">El administrador lo revisará antes de que aparezca en el curso.</p>
+            <button class="admin-primary" id="course-comment-send" type="submit" disabled>Enviar comentario</button>
+          </form>
+          <p id="course-discussion-status" role="status"></p>
+          <ol id="course-comment-list" class="course-comment-list"></ol>
+          <button class="academy-text-button" id="course-comments-more" type="button" hidden>Ver más comentarios</button>
+        </section>
+      </section>
+      <section class="academy-feed" id="feed" aria-labelledby="feed-title">
+        <header class="feed-heading">
+          <h2 id="feed-title">Feed de la comunidad</h2>
+          <p>Comparte tus looks y descubre lo que está creando la comunidad.</p>
+          <nav class="feed-shortcuts" aria-label="Accesos desde el feed">
+            <a href="#podio">Ver podio</a>
+            <a href="#shop">Ir a Shop</a>
+          </nav>
+        </header>
+        <a id="feed-signin" class="academy-text-button" href="#student-access">Inicia sesión para participar</a>
+        <form id="feed-compose" class="feed-composer" method="post" action="/api/academy/feed" enctype="multipart/form-data" hidden>
+          <div class="feed-composer__message">
+            <img class="profile-avatar" id="feed-composer-avatar" src="/assets/avatar-generico.svg" alt="" />
+            <label class="academy-screen-reader" for="feed-message">Tu publicación</label>
+            <textarea id="feed-message" name="text" rows="2" maxlength="1800" placeholder="¿Qué quieres compartir?" aria-describedby="feed-photo-help"></textarea>
+          </div>
+          <div id="feed-preview" class="feed-photos feed-photos--preview"></div>
+          <div class="feed-composer__bar">
+            <label class="feed-attach">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9" r="1.5" /><path d="m3 17 4-4 3 3 4-5 7 7" /></svg>
+              <span>Fotos</span>
+              <input type="file" name="photos" multiple accept="image/jpeg,image/png,image/webp" aria-describedby="feed-photo-help" />
+            </label>
+            <button type="submit" class="admin-primary">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 18-7-7 18-3-8-8-3Zm8 3 10-10" /></svg>
+              Publicar
+            </button>
+          </div>
+          <small id="feed-photo-help" class="feed-composer__help">Publicación pública · Hasta 4 fotos de 5 MB cada una.</small>
+        </form>
+        <p id="feed-status" role="status"></p>
+        <div id="feed-posts" class="feed-posts" tabindex="-1"></div>
+        <nav class="feed-pagination" id="feed-pagination" aria-label="Páginas del feed" hidden>
+          <button id="feed-prev" type="button" class="admin-secondary" hidden>Anteriores</button>
+          <span id="feed-page" aria-live="polite"></span>
+          <button id="feed-more" type="button" class="admin-secondary" hidden>Siguientes</button>
+        </nav>
+      </section>
+      <section class="ranking-section" id="podio" aria-labelledby="ranking-title" data-ranking>
+        <header class="ranking-heading">
+          <h2 id="ranking-title">Podio de participantes</h2>
+          <p>Las cinco personas con más actividad en los cursos y la comunidad.</p>
+          <span class="ranking-sample" hidden>Podio de ejemplo</span>
+        </header>
+        <ol class="ranking-list" role="list"></ol>
+        <p class="ranking-error" role="status"></p>
+      </section>
+      <section class="academy-panel academy-shop" id="shop" aria-labelledby="shop-title">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16l1 13H3L4 8Zm4 2V6a4 4 0 0 1 8 0v4" /></svg>
+        <h2 id="shop-title">Shop</h2>
+        <p>Muy pronto</p>
+      </section>
+    </main>
+    <nav class="academy-dock" aria-label="Navegación de Mi espacio">
+      <a href="#student-access" data-dock="perfil"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3.4" /><path d="M5 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2" /></svg>Perfil</a>
+      <a href="/#cursos" data-dock="mis-cursos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></svg>Cursos</a>
+      <a href="#feed" data-dock="feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8h-1l-5 2 .8-4A8 8 0 1 1 20 11.5Z" /><path d="M9 12h6" /></svg>Feed</a>
+      <a href="#shop" data-dock="shop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16l1 13H3L4 8Zm4 2V6a4 4 0 0 1 8 0v4" /></svg>Shop</a>
+    </nav>
+    <dialog id="next-chapter-dialog" class="academy-next-dialog" aria-labelledby="next-chapter-heading" aria-describedby="next-chapter-name">
+      <p class="academy-progress-label">Capítulo visto</p>
+      <h2 id="next-chapter-heading">Siguiente capítulo</h2>
+      <p id="next-chapter-name"></p>
+      <div class="academy-next-dialog__actions">
+        <form method="dialog"><button class="admin-secondary" type="submit">Ahora no</button></form>
+        <button class="admin-primary" id="open-next-chapter" type="button" autofocus>Ver siguiente capítulo</button>
+      </div>
+    </dialog>
+  </body>
+</html>

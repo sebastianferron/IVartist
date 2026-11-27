@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Dashboard · Ivanna Saldaña · Makeup Artist</title>
+    <link rel="icon" href="/favicon.ico?v=6ccb322a" sizes="16x16 32x32 48x48" />
+    <link rel="stylesheet" href="/admin.css" />
+    <link rel="stylesheet" href="/academy.css" />
+    <link rel="stylesheet" href="/navigation.css" />
+    <link rel="stylesheet" href="/academy-finance.css" />
+    <script src="/home-config.js" defer></script>
+    <script src="/admin.js" defer></script>
+    <script src="/academy-admin.js" defer></script>
+    <script src="/academy-finance-admin.js" defer></script>
+    <script src="/dashboard.js" defer></script>
+    <script src="/navigation.js" defer></script>
+  </head>
+  <body class="dashboard-page">
+    <a class="dashboard-skip" href="#dashboard-content">Saltar al contenido</a>
+    <header class="dashboard-header" data-sticky-header>
+      <div class="dashboard-header__brand">
+        <button class="dashboard-menu-button" id="dashboard-menu-toggle" type="button" aria-label="Abrir menú" aria-controls="dashboard-menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <p class="wordmark">
+          <span class="wordmark__logo" aria-hidden="true"><img src="/assets/logo-iv.png" alt="" /></span>
+          <span class="wordmark__name">Ivanna Saldaña <small>Makeup Artist · Administración</small></span>
+        </p>
+      </div>
+      <div class="dashboard-header__actions">
+        <a class="back-link" href="/">Ver portada <span aria-hidden="true">↗</span></a>
+        <span class="account-name" id="account-name"></span>
+        <button class="admin-secondary" id="logout" type="button" disabled>Cerrar sesión</button>
+      </div>
+    </header>
+    <dialog class="dashboard-sidebar" id="dashboard-menu" aria-labelledby="dashboard-menu-title">
+      <div class="dashboard-menu-heading">
+        <h2 id="dashboard-menu-title">Menú</h2>
+        <form method="dialog">
+          <button class="dashboard-menu-button" type="submit" aria-label="Cerrar menú">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </form>
+      </div>
+        <nav class="dashboard-nav" aria-label="Menú de administración">
+          <a href="#resumen">Dashboard</a>
+          <details class="dashboard-menu-group">
+            <summary>Cursos</summary>
+            <a href="#catalogo-vivos">Vivos</a>
+            <a href="#catalogo-especiales">Especiales</a>
+            <a href="#catalogo-cursos">Cursos</a>
+          </details>
+          <a href="#academy-students">Estudiantes</a>
+          <a href="#academy-payments">Revisión de pagos</a>
+          <a href="#finanzas">Finanzas</a>
+          <a href="#academy-reviews">Moderar reseñas</a>
+          <a href="#academy-comments">Comentarios de cursos</a>
+          <a href="#academy-feed-admin">Comunidad</a>
+          <a href="#academy-news">Notificaciones y novedades</a>
+          <details class="dashboard-menu-group">
+            <summary>Textos</summary>
+            <a href="#textos">Todos los textos</a>
+            <div id="editor-nav"></div>
+          </details>
+          <a href="#orden-secciones">Orden de secciones</a>
+          <details class="dashboard-menu-group">
+            <summary>Configuración</summary>
+            <a href="#configuracion">Todos los ajustes</a>
+            <a href="#integraciones">Integraciones</a>
+            <a href="#plugnmeet">PlugNmeet</a>
+            <a href="#waha">WhatsApp · WAHA</a>
+            <a href="#academy-referrals">Referidos y descuentos</a>
+            <a href="#seguridad">Seguridad</a>
+            <div id="settings-nav"></div>
+          </details>
+        </nav>
+    </dialog>
+    <div class="dashboard-layout">
+      <main class="dashboard-main" id="dashboard-content" tabindex="-1">
+        <section class="dashboard-overview" id="resumen" data-dashboard-view aria-labelledby="overview-title">
+          <h1 id="overview-title">Resumen general</h1>
+          <div class="dashboard-metrics">
+            <article><h2>Ingresos aprobados del mes</h2><p id="academy-month">—</p></article>
+            <article><h2>Estudiantes</h2><p id="academy-student-count">—</p></article>
+            <article><h2>Cursos vendidos</h2><p id="academy-approved-count">—</p></article>
+            <article><h2>Pagos pendientes</h2><p id="academy-pending-count">—</p></article>
+          </div>
+          <div class="dashboard-panels">
+            <section class="overview-panel" aria-labelledby="revenue-title">
+              <h2 id="revenue-title">Ingresos aprobados por mes</h2>
+              <p id="academy-revenue-empty" class="revenue-empty">Los pagos aprobados aparecerán aquí.</p>
+              <ol id="academy-revenue" class="academy-revenue" hidden></ol>
+            </section>
+            <section class="overview-panel" aria-labelledby="shortcuts-title">
+              <h2 id="shortcuts-title">Acciones rápidas</h2>
+              <div class="dashboard-shortcuts">
+                <a href="#textos">Editar textos <span aria-hidden="true">↗</span></a>
+                <a href="#catalogo-cursos">Administrar cursos <span aria-hidden="true">↗</span></a>
+                <a href="#academy-payments">Revisar comprobantes <span aria-hidden="true">↗</span></a>
+                <a href="#finanzas">Consultar finanzas <span aria-hidden="true">↗</span></a>
+                <a href="#hero-photo">Cambiar foto del hero <span aria-hidden="true">↗</span></a>
+                <a href="#textos-cintillo">Editar texto del cintillo <span aria-hidden="true">↗</span></a>
+                <a href="#cronometro">Configurar próximo curso <span aria-hidden="true">↗</span></a>
+                <a href="#subscripciones">Editar planes de subscripción <span aria-hidden="true">↗</span></a>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="academy-editor" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-editor-title" hidden>
+          <h2 id="academy-editor-title">Cursos</h2>
+          <nav class="catalog-tabs" aria-label="Categorías de cursos">
+            <a href="#catalogo-vivos" data-catalog-category="live">Vivos</a>
+            <a href="#catalogo-especiales" data-catalog-category="special">Especiales</a>
+            <a href="#catalogo-cursos" data-catalog-category="course">Cursos</a>
+          </nav>
+          <div id="academy-catalog-view">
+            <div class="catalog-header">
+              <h3 id="academy-category-title">Cursos</h3>
+              <button class="admin-primary" id="academy-create" type="button" disabled>Nuevo curso</button>
+            </div>
+            <p id="academy-catalog-status" role="status">Cargando cursos…</p>
+            <ul id="academy-catalog-list" class="catalog-list"></ul>
+          </div>
+          <form id="course-editor" hidden>
+            <div class="catalog-header">
+              <h3 id="academy-course-editor-title" tabindex="-1">Editar curso</h3>
+              <button class="admin-secondary" id="academy-catalog-back" type="button">Volver al listado</button>
+            </div>
+            <p id="academy-publication"></p>
+            <div class="editor-fields">
+              <label class="wide-field">Título del curso
+                <input name="title" maxlength="120" />
+              </label>
+              <label class="wide-field">Descripción del curso
+                <textarea name="description" rows="3" maxlength="1200"></textarea>
+              </label>
+              <label>Precio en bolivianos
+                <input name="price" inputmode="decimal" maxlength="14" placeholder="Ej. 120,00" />
+              </label>
+              <fieldset id="academy-catalog-cover" class="academy-lesson-fields wide-field" hidden>
+                <legend>Portada de Subscripciones</legend>
+                <div class="editor-fields">
+                  <label>Subir imagen de portada
+                    <input id="academy-cover-file" type="file" accept="image/jpeg,image/png,image/webp" />
+                    <small>JPG, PNG o WebP de hasta 6 MB.</small>
+                  </label>
+                  <label>Elegir de la galería
+                    <select name="cover"><option value="">Sin foto</option></select>
+                  </label>
+                  <figure id="academy-cover-preview" class="academy-cover-preview wide-field" hidden>
+                    <img alt="Portada seleccionada" />
+                    <figcaption>Esta portada se verá en la tarjeta de Subscripciones al publicar.</figcaption>
+                  </figure>
+                </div>
+              </fieldset>
+              <label id="academy-qr-field">Imagen del QR bancario
+                <input id="academy-qr-file" type="file" accept="image/jpeg,image/png,image/webp" />
+                <small>JPG, PNG o WebP de hasta 6 MB.</small>
+              </label>
+              <figure id="academy-qr-preview" class="academy-qr-preview" hidden>
+                <img alt="QR bancario seleccionado" />
+                <figcaption>QR del borrador</figcaption>
+              </figure>
+              <label id="academy-instructions-field" class="wide-field">Instrucciones de pago
+                <textarea name="instructions" rows="3" maxlength="900" placeholder="Indica el titular de la cuenta y qué debe enviar el estudiante."></textarea>
+              </label>
+            </div>
+            <fieldset class="academy-lesson-fields" id="academy-live-fields" hidden>
+              <legend>Transmisión en vivo</legend>
+              <div class="editor-fields">
+                <label id="academy-live-provider-field">Sala del vivo
+                  <select name="liveProvider">
+                    <option value="manual">Enlace privado</option>
+                    <option value="plugnmeet">PlugNmeet</option>
+                  </select>
+                </label>
+                <label id="academy-live-link-field">Enlace privado de la transmisión
+                  <input name="liveUrl" type="url" maxlength="500" />
+                  <small>Disponible en Mi espacio tras aprobar el pago.</small>
+                </label>
+                <p id="academy-live-demo" hidden>La simulación reproduce un video de muestra en Mi espacio.</p>
+                <label id="academy-catalog-date" hidden>Fecha y hora en Bolivia (opcional)
+                  <input name="startsAt" type="datetime-local" />
+                </label>
+              </div>
+            </fieldset>
+            <fieldset class="academy-lesson-fields" id="academy-course-fields">
+              <legend id="academy-chapter-label">Capítulos</legend>
+              <p id="academy-chapter-help">Agrega los capítulos en el orden en que se verán en Mi espacio.</p>
+              <div id="academy-chapters"></div>
+              <button id="academy-add-chapter" class="admin-secondary" type="button">Agregar capítulo</button>
+            </fieldset>
+            <template id="academy-chapter-template">
+              <details class="academy-chapter" open>
+                <summary></summary>
+                <div class="editor-fields">
+                  <label class="wide-field">Título
+                    <input data-field="title" maxlength="120" />
+                  </label>
+                  <label class="wide-field">Contenido
+                    <textarea data-field="text" rows="4" maxlength="12000"></textarea>
+                  </label>
+                  <label class="wide-field">Video privado
+                    <input data-field="video" type="file" accept="video/mp4" />
+                    <small>MP4 de hasta 64 MB.</small>
+                  </label>
+                  <div class="academy-chapter-actions wide-field">
+                    <span data-video-state hidden>Video adjunto</span>
+                    <button class="admin-secondary" type="button" data-action="remove-video" hidden>Quitar video</button>
+                  </div>
+                  <div class="academy-chapter-actions wide-field" data-reorder>
+                    <button class="admin-secondary" type="button" data-action="up">Subir</button>
+                    <button class="admin-secondary" type="button" data-action="down">Bajar</button>
+                    <button class="admin-secondary" type="button" data-action="remove">Quitar capítulo</button>
+                  </div>
+                </div>
+              </details>
+            </template>
+            <p id="academy-editor-status" class="feedback" role="status"></p>
+            <div class="academy-admin-actions">
+              <button class="admin-secondary" name="save" value="draft" type="submit">Guardar borrador</button>
+              <button class="admin-primary" name="save" value="publish" type="submit">Publicar y abrir inscripciones</button>
+              <button class="admin-secondary" id="academy-close" type="button" hidden>Cerrar inscripciones</button>
+              <a class="back-link" href="/mi-espacio">Ver Mi espacio ↗</a>
+            </div>
+          </form>
+          <section class="editor-section academy-room-panel" id="academy-room-panel" aria-labelledby="academy-room-title" hidden>
+            <h3 id="academy-room-title">Sala y grabaciones de PlugNmeet</h3>
+            <div class="academy-admin-actions">
+              <button class="admin-primary" type="button" data-room-action="host">Abrir como moderador</button>
+              <button class="admin-secondary" type="button" data-room-action="status">Consultar sala</button>
+              <button class="admin-secondary" type="button" data-room-action="end">Cerrar sala</button>
+              <button class="admin-secondary" type="button" data-room-action="recordings">Ver grabaciones</button>
+            </div>
+            <p id="academy-room-status" class="feedback" role="status"></p>
+            <ul id="academy-room-recordings" class="catalog-list" hidden></ul>
+            <button class="admin-secondary" id="academy-room-more" type="button" hidden>Ver más grabaciones</button>
+            <a class="back-link" id="academy-room-courses" href="#catalogo-cursos" hidden>Ir a cursos para subir el MP4 editado ↗</a>
+          </section>
+        </section>
+
+        <section id="academy-students" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-students-title" hidden>
+          <h2 id="academy-students-title">Estudiantes</h2>
+          <p id="academy-student-status" role="status">Cargando registros…</p>
+          <ul id="academy-student-list" class="academy-student-list" hidden></ul>
+        </section>
+
+        <section id="academy-payments" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-payments-title" hidden>
+          <h2 id="academy-payments-title">Revisión de pagos</h2>
+          <p>Abre el comprobante y verifica el depósito y el monto en tu cuenta. Al aprobarlo, habilitas el contenido para esa persona.</p>
+          <p id="academy-payments-status" class="feedback" role="status">Cargando avisos de pago…</p>
+          <button class="admin-secondary" id="academy-reload-payments" type="button" hidden>Actualizar pagos</button>
+          <div id="academy-order-list" class="academy-order-list"></div>
+        </section>
+
+        <section id="finanzas" class="editor-section finance" data-dashboard-view aria-labelledby="finance-title" hidden>
+          <header class="finance-header">
+            <div>
+              <h2 id="finance-title">Finanzas</h2>
+              <p>Consulta los cobros aprobados y registra movimientos del negocio.</p>
+            </div>
+            <div class="finance-action">
+              <a id="finance-export" class="admin-secondary" hidden>Exportar CSV</a>
+              <button id="finance-print" type="button" class="admin-secondary" hidden>Imprimir</button>
+            </div>
+          </header>
+          <form id="finance-filters" class="finance-form finance-filters">
+            <label>Período
+              <select name="period">
+                <option value="today">Hoy</option><option value="yesterday">Ayer</option><option value="week">Últimos 7 días</option>
+                <option value="days30">Últimos 30 días</option><option value="month" selected>Este mes</option>
+                <option value="previous">Mes anterior</option><option value="year">Este año</option><option value="all">Histórico</option>
+                <option value="custom">Personalizado</option>
+              </select>
+            </label>
+            <label data-finance-range hidden>Desde <input type="date" name="start" /></label>
+            <label data-finance-range hidden>Hasta <input type="date" name="end" /></label>
+            <button class="admin-primary" type="submit">Consultar</button>
+          </form>
+          <p id="finance-period" class="finance-period"></p>
+          <p id="finance-status" role="status"></p>
+          <div id="finance-totals" class="finance-totals"></div>
+          <div class="finance-breakdown">
+            <section class="overview-panel" aria-labelledby="finance-offers-title">
+              <h3 id="finance-offers-title">Ventas por oferta</h3>
+              <div id="finance-offers"></div>
+            </section>
+            <section class="overview-panel" aria-labelledby="finance-countries-title">
+              <h3 id="finance-countries-title">Ingresos por país</h3>
+              <div id="finance-countries"></div>
+            </section>
+          </div>
+          <details class="overview-panel finance-create">
+            <summary>Registrar movimiento</summary>
+            <form id="finance-entry" class="finance-form" method="post" action="/api/admin/academy/finance/entries" enctype="multipart/form-data">
+              <label>Tipo
+                <select name="kind">
+                  <option value="expense">Gasto operativo</option><option value="fee">Comisión</option><option value="refund">Devolución</option>
+                </select>
+              </label>
+              <label>Fecha <input type="date" name="day" required /></label>
+              <label>Concepto <input name="concept" maxlength="120" required /></label>
+              <label data-expense-category>Categoría <input name="category" list="finance-categories" maxlength="80" required /></label>
+              <datalist id="finance-categories"></datalist>
+              <label data-refund-order hidden>Compra que se devolvió <select name="orderId" disabled></select></label>
+              <label>Importe <input name="amount" inputmode="decimal" maxlength="14" required /></label>
+              <div class="finance-field">
+                <label for="finance-currency">Moneda</label>
+                <select id="finance-currency" name="currency">
+                  <option>BOB</option><option>USD</option><option>EUR</option><option>BRL</option><option>ARS</option><option>CLP</option><option>PEN</option>
+                </select>
+              </div>
+              <label>Proveedor (opcional) <input name="provider" maxlength="120" /></label>
+              <label>Método de pago (opcional) <input name="method" maxlength="40" /></label>
+              <label class="finance-wide">Comprobante (opcional) <input type="file" name="proof" accept="image/jpeg,image/png,image/webp,application/pdf" /></label>
+              <label class="finance-wide">Observaciones (opcional) <textarea name="note" rows="2" maxlength="600"></textarea></label>
+              <button class="admin-primary" type="submit">Guardar movimiento</button>
+              <p id="finance-entry-status" role="status"></p>
+            </form>
+          </details>
+          <section class="overview-panel" aria-labelledby="finance-movements-title">
+            <h3 id="finance-movements-title">Movimientos registrados</h3>
+            <div id="finance-entries"></div>
+          </section>
+        </section>
+
+        <section id="academy-reviews" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-reviews-title" hidden>
+          <h2 id="academy-reviews-title">Moderar reseñas</h2>
+          <p id="academy-reviews-status" class="feedback" role="status">Cargando reseñas…</p>
+          <button class="admin-secondary" id="academy-reload-reviews" type="button" hidden>Actualizar reseñas</button>
+          <div id="academy-review-list" class="academy-order-list"></div>
+        </section>
+        <section id="academy-comments" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-comments-title" hidden>
+          <h2 id="academy-comments-title">Comentarios de cursos</h2>
+          <p id="academy-comments-status" class="feedback" role="status">Cargando comentarios…</p>
+          <button class="admin-secondary" id="academy-reload-comments" type="button">Actualizar comentarios</button>
+          <div id="academy-comment-list" class="academy-order-list"></div>
+        </section>
+
+        <section id="academy-feed-admin" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-feed-admin-title" hidden>
+          <h2 id="academy-feed-admin-title">Comunidad</h2>
+          <p>Revisa y modera las publicaciones y los comentarios del feed público.</p>
+          <p id="admin-feed-status" class="feedback" role="status"></p>
+          <div id="admin-feed-list" class="academy-order-list"></div>
+          <button id="admin-feed-more" class="admin-secondary" type="button" hidden>Ver más publicaciones</button>
+        </section>
+        <section id="academy-news" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-news-title" hidden>
+          <h2 id="academy-news-title">Notificaciones y novedades</h2>
+          <p>Publica una noticia en el feed y en la campanita. Puedes enviarla también a los dispositivos con notificaciones activadas.</p>
+          <form id="academy-news-form" class="academy-news-form" method="post" action="/api/admin/academy/news" enctype="multipart/form-data">
+            <label>Título <input name="title" maxlength="90" required /></label>
+            <label>Mensaje <textarea name="body" rows="5" maxlength="1800" required></textarea></label>
+            <label>Fotos (opcional)
+              <input name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp" aria-describedby="academy-news-photo-help" />
+              <small id="academy-news-photo-help">Hasta 4 fotos de 5 MB cada una.</small>
+            </label>
+            <label>Enlace adicional en el feed (opcional)
+              <select name="destination">
+                <option value="">Sin enlace adicional</option>
+                <option value="feed">Feed de la comunidad</option>
+                <option value="courses">Subscripciones</option>
+                <option value="shop">Shop</option>
+                <option value="portfolio">Portafolio de cursos</option>
+              </select>
+            </label>
+            <label class="academy-news-push"><input name="push" type="checkbox" /> Enviar también como notificación push</label>
+            <button class="admin-primary" type="submit">Publicar noticia</button>
+          </form>
+          <p id="academy-news-status" class="feedback" role="status"></p>
+          <h3>Novedades publicadas</h3>
+          <ul id="academy-news-list"></ul>
+        </section>
+        <section id="academy-referrals" class="editor-section academy-admin-section" data-dashboard-view aria-labelledby="academy-referrals-title" hidden>
+          <h2 id="academy-referrals-title">Referidos y descuentos</h2>
+          <form id="admin-referrals-form" class="academy-news-form">
+            <fieldset class="referral-settings-group">
+              <legend>Código promocional del sitio</legend>
+              <label class="academy-news-push"><input name="promoEnabled" type="checkbox" /> Habilitar código promocional</label>
+              <label>Código <input name="promoCode" maxlength="24" autocapitalize="characters" spellcheck="false" placeholder="IVANNA10" /></label>
+              <label>Descuento (%)
+                <input name="promoPercent" type="number" min="0" max="99" step="1" inputmode="numeric" required />
+              </label>
+            </fieldset>
+            <fieldset class="referral-settings-group">
+              <legend>Invitaciones de participantes</legend>
+              <label class="academy-news-push"><input name="invitesEnabled" type="checkbox" /> Habilitar invitaciones</label>
+              <label class="academy-news-push"><input name="samePercent" type="checkbox" /> Usar el mismo porcentaje para ambas personas</label>
+              <label>Descuento en la primera compra de la persona invitada (%)
+                <input name="buyerPercent" type="number" min="0" max="99" step="1" inputmode="numeric" required />
+              </label>
+              <label id="referrer-percent-field">Descuento que gana quien invita (%)
+                <input name="referrerPercent" type="number" min="0" max="99" step="1" inputmode="numeric" required />
+              </label>
+              <p>Los cambios se aplican a las invitaciones nuevas. El premio se habilita al aprobar el primer pago real de la persona invitada.</p>
+            </fieldset>
+            <p>Para cobrar el total con descuento, usa un QR bancario que permita ingresar el monto.</p>
+            <button class="admin-primary" type="submit" disabled>Guardar descuentos</button>
+          </form>
+          <p id="admin-referrals-status" class="feedback" role="status"></p>
+        </section>
+        <section id="home-settings" data-dashboard-view aria-labelledby="editor-title" hidden>
+          <div class="dashboard-intro">
+            <h2 id="editor-title" tabindex="-1">Configuración de la portada</h2>
+            <p id="published-status">Cargando la configuración…</p>
+            <button class="admin-secondary" type="button" id="import-legacy" hidden>Recuperar edición anterior</button>
+          </div>
+          <nav class="dashboard-shortcuts editor-index" id="editor-index" aria-label="Editar la portada"></nav>
+          <nav class="dashboard-shortcuts editor-index" id="settings-index" aria-label="Ajustes de la portada" hidden>
+            <a href="#integraciones">Integraciones <span aria-hidden="true">↗</span></a>
+            <a href="#academy-referrals">Referidos y descuentos <span aria-hidden="true">↗</span></a>
+            <a href="#seguridad">Seguridad <span aria-hidden="true">↗</span></a>
+          </nav>
+          <div id="editor-workspace" hidden>
+            <form id="home-editor" hidden>
+              <div id="editor-sections"></div>
+              <div class="dashboard-toolbar">
+                <p class="feedback" id="editor-status" role="status" aria-live="polite"></p>
+                <div class="dashboard-toolbar__actions">
+                  <button class="admin-secondary" name="action" value="draft" type="submit">Guardar borrador</button>
+                  <button class="admin-secondary" name="action" value="preview" type="submit">Vista previa</button>
+                  <button class="admin-primary" name="action" value="publish" type="submit">Publicar cambios <span aria-hidden="true">↗</span></button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </section>
+        <section id="integraciones" class="editor-section" data-dashboard-view aria-labelledby="integrations-title" hidden>
+          <h2 id="integrations-title">Integraciones</h2>
+          <div class="integration-grid">
+            <article>
+              <h3>Correo de inscripciones</h3>
+              <p id="academy-email-configuration" role="status">Consultando el estado del correo…</p>
+              <a class="back-link" href="#academy-payments">Ver seguimiento de los avisos ↗</a>
+            </article>
+            <article>
+              <h3>Pasarela de pago</h3>
+              <p>Integración externa prevista para más adelante. El cobro actual usa QR y aprobación manual del comprobante.</p>
+              <a class="back-link" href="#academy-payments">Ver revisión de pagos ↗</a>
+            </article>
+            <article>
+              <h3>WhatsApp Business API</h3>
+              <p>Por conectar. El botón de la portada abre el chat con el número configurado.</p>
+              <a class="back-link" href="#whatsapp-contacto">Configurar número ↗</a>
+            </article>
+            <article>
+              <h3>PlugNmeet</h3>
+              <p>Conexión para salas en vivo, moderación y descarga de grabaciones.</p>
+              <a class="back-link" href="#plugnmeet">Configurar PlugNmeet ↗</a>
+            </article>
+            <article class="academy-order-review">
+              <h3>WhatsApp · WAHA</h3>
+              <p>Recibe solicitudes de revisión de pagos en el número que elijas.</p>
+              <a class="back-link" href="#waha">Configurar WhatsApp ↗</a>
+            </article>
+          </div>
+        </section>
+        <section id="waha" class="editor-section" data-dashboard-view aria-labelledby="waha-title" hidden>
+          <h2 id="waha-title">WhatsApp · WAHA</h2>
+          <p>Al recibir un comprobante, el equipo de administración recibe el curso, el importe y un enlace directo al pago. La aprobación se realiza en el panel.</p>
+          <form id="waha-settings" method="post" action="/api/admin/academy/waha">
+            <fieldset class="academy-lesson-fields">
+              <legend>Conexión y destino</legend>
+              <div class="editor-fields">
+                <label class="academy-news-push wide-field"><input type="checkbox" name="enabled" /> Enviar avisos de comprobantes nuevos</label>
+                <label>URL de WAHA en Northflank <input name="address" type="url" maxlength="400" placeholder="https://waha.tudominio.com" /></label>
+                <label>API key <input name="apiKey" type="password" maxlength="500" autocomplete="new-password" /><small id="waha-secret-status"></small></label>
+                <label>Sesión de WAHA <input name="session" maxlength="64" placeholder="default" required /></label>
+                <label>WhatsApp de revisión <input name="recipient" type="tel" maxlength="35" placeholder="+591 70000000" /></label>
+                <label class="wide-field">URL pública del sitio <input name="siteUrl" type="url" maxlength="400" placeholder="https://tudominio.com" /></label>
+                <label class="academy-news-push wide-field"><input name="attachReceipt" type="checkbox" /> Adjuntar también el comprobante al mensaje</label>
+              </div>
+            </fieldset>
+            <div class="academy-admin-actions">
+              <button class="admin-primary" type="submit" disabled>Guardar conexión</button>
+              <button class="admin-secondary" id="waha-test" type="button" disabled>Probar conexión</button>
+            </div>
+            <p id="waha-status" class="feedback" role="status"></p>
+          </form>
+        </section>
+        <section id="plugnmeet" class="editor-section" data-dashboard-view aria-labelledby="plugnmeet-title" hidden>
+          <h2 id="plugnmeet-title">PlugNmeet</h2>
+          <form id="plugnmeet-settings" method="post" action="/api/admin/academy/plugnmeet">
+            <fieldset class="academy-lesson-fields">
+              <legend>Conexión</legend>
+              <div class="editor-fields">
+                <label class="academy-news-push wide-field"><input type="checkbox" name="enabled" /> Habilitar PlugNmeet para los vivos</label>
+                <label>URL del servidor <input name="serverUrl" type="url" maxlength="400" placeholder="https://meet.tudominio.com" /></label>
+                <label>URL del cliente (opcional) <input name="clientUrl" type="url" maxlength="400" placeholder="https://clases.tudominio.com/" /><small>Si queda vacío, se abre el cliente del servidor.</small></label>
+                <label>API key <input name="apiKey" type="text" maxlength="250" autocomplete="off" spellcheck="false" /></label>
+                <label>API secret <input name="apiSecret" type="password" maxlength="500" autocomplete="new-password" /><small id="plugnmeet-secret-status"></small></label>
+                <label>Nombre de moderación <input name="moderator" maxlength="90" required /></label>
+                <label>Idioma del cliente <input name="language" maxlength="16" placeholder="es-ES" required /></label>
+              </div>
+            </fieldset>
+            <fieldset class="academy-lesson-fields">
+              <legend>Preferencias de las salas nuevas</legend>
+              <div class="editor-fields">
+                <label>Capacidad (0 = sin límite) <input name="capacity" type="number" min="0" max="2000" required /></label>
+                <label>Duración en minutos (0 = sin límite) <input name="duration" type="number" min="0" max="1440" required /></label>
+                <label>Espera sin participantes, en segundos <input name="emptyTimeout" type="number" min="10" max="3600" required /></label>
+                <label class="wide-field">Mensaje de bienvenida <textarea name="welcomeMessage" rows="2" maxlength="400"></textarea></label>
+                <div class="plugnmeet-options wide-field">
+                  <label><input name="webcams" type="checkbox" /> Cámaras habilitadas</label>
+                  <label><input name="participantWebcams" type="checkbox" /> Cámara para participantes</label>
+                  <label><input name="viewOtherWebcams" type="checkbox" /> Ver otras cámaras</label>
+                  <label><input name="muteOnStart" type="checkbox" /> Micrófonos silenciados al entrar</label>
+                  <label><input name="screenShare" type="checkbox" /> Compartir pantalla</label>
+                  <label><input name="participantScreenShare" type="checkbox" /> Compartir pantalla como participante</label>
+                  <label><input name="waitingRoom" type="checkbox" /> Sala de espera</label>
+                  <label><input name="chat" type="checkbox" /> Chat</label>
+                  <label><input name="chatFiles" type="checkbox" /> Adjuntos en el chat</label>
+                  <label><input name="participantList" type="checkbox" /> Lista de participantes visible</label>
+                  <label><input name="raiseHand" type="checkbox" /> Levantar la mano</label>
+                  <label><input name="whiteboard" type="checkbox" /> Pizarra</label>
+                  <label><input name="sharedNotes" type="checkbox" /> Notas compartidas</label>
+                  <label><input name="cloudRecording" type="checkbox" /> Habilitar grabación en el VPS</label>
+                  <label><input name="autoRecording" type="checkbox" /> Grabar automáticamente al entrar la moderación</label>
+                </div>
+              </div>
+            </fieldset>
+            <div class="academy-admin-actions">
+              <button class="admin-primary" type="submit" disabled>Guardar conexión</button>
+              <button class="admin-secondary" id="plugnmeet-test" type="button" disabled>Probar conexión</button>
+            </div>
+            <p id="plugnmeet-status" class="feedback" role="status"></p>
+          </form>
+        </section>
+        <section id="seguridad" class="editor-section" data-dashboard-view hidden>
+          <h2>Seguridad</h2>
+          <p id="session-status">Cargando sesión…</p>
+          <p id="superadmin-status" hidden>Superadmin · Cuenta protegida contra eliminación desde el panel.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

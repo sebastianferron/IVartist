@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Acceso · Ivanna Saldaña · Makeup Artist</title>
+    <link rel="icon" href="/favicon.ico?v=6ccb322a" sizes="16x16 32x32 48x48" />
+    <link rel="stylesheet" href="/admin.css" />
+    <link rel="stylesheet" href="/navigation.css" />
+    <script src="/admin.js" defer></script>
+    <script src="/navigation.js" defer></script>
+  </head>
+  <body class="login-page">
+    <main class="login-layout">
+      <div class="login-visual" aria-hidden="true"></div>
+      <section class="login-panel" aria-labelledby="login-title">
+        <a class="back-link" href="/">← Volver a la portada</a>
+        <p class="wordmark">
+          <span class="wordmark__logo" aria-hidden="true"><img src="/assets/logo-iv.png" alt="" /></span>
+          <span class="wordmark__name">Ivanna Saldaña <small>Makeup Artist</small></span>
+        </p>
+        <h1 id="login-title">Iniciar sesión</h1>
+        <p id="login-intro">Accede al panel para editar el sitio de Ivanna Saldaña.</p>
+        <form id="login-form">
+          <label>Usuario
+            <input name="username" autocomplete="username" maxlength="80" spellcheck="false" required />
+          </label>
+          <label>Contraseña
+            <input name="password" type="password" autocomplete="current-password" maxlength="128" required />
+          </label>
+          <button class="admin-primary" type="submit">Entrar al panel <span aria-hidden="true">↗</span></button>
+          <p class="feedback" id="login-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

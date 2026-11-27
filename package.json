@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "test": "node --test server.test.js academy.test.js cloudflare/cloud.test.mjs",
+    "build": "node cloudflare/build-pages.mjs",
+    "worker:check": "wrangler deploy --config cloudflare/wrangler.worker.jsonc --dry-run --outdir dist-worker"
+  },
+  "dependencies": {
+    "web-push": "^4.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.168.0"
+  }
+}

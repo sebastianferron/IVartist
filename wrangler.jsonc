@@ -1,0 +1,6 @@
+{
+  "name": "ivartist",
+  "compatibility_date": "2026-11-26",
+  "pages_build_output_dir": "./dist",
+  "services": [{ "binding": "IVARTIST_API", "service": "ivartist-api" }]
+}

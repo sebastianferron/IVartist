@@ -1,0 +1,57 @@
+.payment-amount { margin: 0 0 13px; color: #ffdaac; font: 400 28px/1.1 Georgia, serif; }
+.payment-savings { display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: center; margin: 0 0 12px; color: #f7c8db; font-size: .88rem; }
+.payment-savings strong, .payment-discount-total { color: #ffdcad; }
+.payment-discounts { padding: 11px; margin: 0 0 14px; border: 1px solid #b584a27d; border-radius: 9px; background: #321d2c; }
+.payment-code-form, .payment-discount-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+.payment-code-form label { flex: 1 1 160px; display: grid; gap: 4px; min-width: 0; color: #f3dce5; font-size: .88rem; }
+.payment-code-form input { min-height: 41px; width: 100%; padding: 6px 9px; border: 1px solid #bd88a4; border-radius: 6px; background: #211522; color: #fff0f6; font: inherit; }
+.payment-discounts button { min-height: 41px; font-size: .83rem; }
+.payment-discount-actions { margin-top: 8px; }
+.payment-discounts .payment-feedback { font-size: .85rem; }
+.payment-discount-total { margin: 0 0 5px; font-weight: 700; }
+.payment-qr-layout { display: grid; justify-items: center; gap: 12px; margin-bottom: 18px; }
+.payment-qr-image { display: block; box-sizing: border-box; width: min(100%, 320px); height: auto; max-height: 355px; object-fit: contain; padding: 8px; background: #fff; border-radius: 8px; }
+.payment-qr-info { width: min(100%, 46ch); min-width: 0; text-align: center; }
+.payment-instructions { margin: 0; color: #f3dce5; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.payment-download { display: inline-flex; align-items: center; min-height: 44px; color: #f6c6d9; text-decoration: underline; text-underline-offset: 4px; }
+.payment-report { display: grid; justify-items: start; gap: 10px; }
+.payment-report label { display: grid; gap: 7px; width: 100%; min-width: 0; color: #f3dce5; font-size: 14px; }
+.payment-report input { min-width: 0; width: 100%; }
+.payment-submit { min-height: 44px; padding: 9px 16px; border: 1px solid #edbacb; border-radius: 6px; background: #f5c1d5; color: #301924; font-weight: 750; cursor: pointer; }
+.payment-submit:disabled { opacity: .65; cursor: wait; }
+.payment-submit[aria-disabled="true"] { color: #f3dce5; background: #362132; border-color: #a98098; cursor: not-allowed; }
+.payment-status, .payment-feedback { margin: 6px 0; color: #f3dce5; line-height: 1.5; }
+.payment-feedback:empty { display: none; }
+.payment-help { margin: 2px 0 0; color: #e7cdd9; font-size: 14px; line-height: 1.45; }
+.payment-error { color: #ffc2d4; }
+.payment-state { margin: 0 0 16px; padding: 12px 14px; border: 1px solid #b584a2; border-radius: 10px; background: #431f39; }
+.payment-state strong { display: block; color: #ffdfaf; }
+.payment-state[data-state="approved"] { background: #293931; border-color: #80b39b; }
+.payment-state[data-state="approved"] strong { color: #c4f5d8; }
+.payment-state .payment-status { margin-bottom: 0; }
+.payment-web-alert { position: fixed; z-index: 110; right: 18px; bottom: 86px; display: flex; align-items: center; gap: 8px; width: min(355px, calc(100% - 36px)); padding: 10px; border: 1px solid #9cc8b3; border-radius: 12px; background: #20372e; color: #e2f5e9; box-shadow: 0 10px 24px #130c1c70; }
+.payment-web-alert[hidden] { display: none; }
+.payment-web-alert a { flex: 1; padding: 5px; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 3px; }
+.payment-web-alert button { flex-shrink: 0; }
+.academy-payment-alerts { display: grid; gap: 10px; margin: 18px 0; }
+.academy-payment-alerts h2, .academy-payment-alerts p { margin: 0; }
+.academy-payment-alerts header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.academy-payment-alerts > p:empty { display: none; }
+.academy-payment-alerts ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.academy-payment-alerts li { margin: 0; }
+.academy-payment-alerts li p { margin: 4px 0; overflow-wrap: anywhere; }
+.academy-payment-alerts .payment-download { color: inherit; }
+.academy-payment-alerts li { scroll-margin-top: 82px; }
+.academy-orders article:target, .academy-payment-alerts li:target { outline: 2px solid #f6c6d9; outline-offset: 3px; }
+
+@media (max-width: 560px) {
+  .payment-submit { width: 100%; }
+}
+
+@media (min-width: 540px) {
+  .academy-payment-alerts ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 760px) {
+  .academy-payment-alerts ul { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

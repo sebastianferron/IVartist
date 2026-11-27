@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Ivanna Saldaña · Makeup Artist",
+  "short_name": "Ivanna Makeup",
+  "lang": "es-BO",
+  "start_url": "/mi-espacio",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#13080f",
+  "theme_color": "#13080f",
+  "icons": [
+    { "src": "/assets/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Mi espacio", "url": "/mi-espacio" },
+    { "name": "Feed de la comunidad", "url": "/mi-espacio#feed" }
+  ]
+}

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#13080f" />
+    <meta name="description" content="Ivanna Saldaña · Makeup Artist en Bolivia. Portafolio y cursos de maquillaje." />
+    <meta name="robots" content="index,follow" />
+    <title>Ivanna Saldaña · Makeup Artist</title>
+    <link rel="icon" href="/favicon.ico?v=6ccb322a" sizes="16x16 32x32 48x48" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/app-192.png" />
+    <link rel="preload" href="assets/hero-editorial.jpeg" as="image" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="profile.css" />
+    <link rel="stylesheet" href="academy-payment.css" />
+    <link rel="stylesheet" href="navigation.css" />
+    <link rel="stylesheet" href="/app-notifications.css" />
+    <link rel="stylesheet" href="/academy-ranking.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+    <header class="site-header" id="site-header" data-sticky-header>
+      <a class="brand" href="#inicio">
+        <span class="brand__monogram" aria-hidden="true"><img src="assets/logo-iv.png" alt="" /></span>
+        <span class="brand__text">
+          <strong data-copy="brandName">IVANNA SALDAÑA</strong>
+          <small data-copy="brandSubtitle">MAKEUP ARTIST</small>
+        </span>
+      </a>
+      <div class="site-header__menu">
+        <nav class="site-nav" aria-label="Navegación principal">
+          <a href="#inicio" data-copy="navHome">Inicio</a>
+          <a href="#subscripciones" data-copy="navSubscriptions">Subscripciones</a>
+          <a href="#quien-soy" data-copy="navAbout">Quién soy</a>
+          <a href="#cursos" data-copy="navCourses">Cursos</a>
+        </nav>
+        <div class="site-account-control" id="site-account-control">
+          <a class="site-account" id="site-account" href="/mi-espacio" aria-haspopup="dialog" aria-controls="account-dialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <circle cx="12" cy="8" r="3.4" />
+              <path d="M5.5 20v-2a4.8 4.8 0 0 1 4.8-4.8h3.4a4.8 4.8 0 0 1 4.8 4.8v2" />
+            </svg>
+            <span class="sr-only" id="site-account-label">Entrar a Mi espacio</span>
+          </a>
+          <div class="site-account-menu" id="site-account-menu" hidden>
+            <a href="/mi-espacio" data-copy="accountMenuSpace">Mi espacio</a>
+            <button id="site-account-logout" type="button" data-copy="accountMenuLogout">Cerrar sesión</button>
+            <p class="site-account-menu__feedback" id="site-account-menu-feedback" role="status"></p>
+          </div>
+          <p id="site-account-status" class="sr-only" role="status"></p>
+        </div>
+        <div id="site-notification-slot"></div>
+      </div>
+    </header>
+
+    <dialog class="account-dialog" id="account-dialog" aria-labelledby="account-dialog-title">
+      <div class="account-dialog__header">
+        <h2 id="account-dialog-title" data-copy="accountLoginTitle">Entrar a Mi espacio</h2>
+        <form method="dialog">
+          <button class="account-dialog__close" type="submit">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            <span class="sr-only" data-copy="accountLoginClose">Cerrar formulario</span>
+          </button>
+        </form>
+      </div>
+      <form class="community__form account-dialog__form" id="account-login" method="post" action="/api/academy/login">
+        <label>
+          <span data-copy="communityEmailLabel">Correo electrónico</span>
+          <input name="email" type="email" autocomplete="username" maxlength="160" required autofocus />
+        </label>
+        <label>
+          <span data-copy="communityPasswordLabel">Contraseña</span>
+          <input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="128" required />
+        </label>
+        <div class="community__actions">
+          <button class="community__submit" type="submit" data-copy="accountLoginSubmit">Iniciar sesión</button>
+          <a class="community__login" id="account-register-link" href="#comunidad" data-copy="accountLoginRegister">Crear mi cuenta</a>
+        </div>
+        <p class="community__feedback" id="account-login-feedback" role="status"></p>
+      </form>
+    </dialog>
+
+    <dialog class="account-dialog checkout-dialog" id="checkout-dialog" aria-labelledby="checkout-title">
+      <div class="account-dialog__header">
+        <h2 id="checkout-title" tabindex="-1">Inscripción</h2>
+        <form method="dialog">
+          <button class="account-dialog__close" type="submit">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            <span class="sr-only" data-copy="accountLoginClose">Cerrar formulario</span>
+          </button>
+        </form>
+      </div>
+      <p id="checkout-context" class="checkout-context"></p>
+      <div id="checkout-registration"></div>
+      <div id="checkout-payment"></div>
+      <p id="checkout-feedback" class="payment-feedback" role="status"></p>
+      <a class="payment-download" id="checkout-space" href="/mi-espacio" hidden>Ir a Mi espacio ↗</a>
+    </dialog>
+    <aside class="payment-web-alert" id="payment-web-alert" hidden>
+      <a href="/mi-espacio" id="payment-web-alert-link"><span id="payment-web-alert-text" role="status"></span></a>
+      <button class="account-dialog__close" type="button" aria-label="Cerrar aviso de pago">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+      </button>
+    </aside>
+
+    <main id="contenido">
+      <section class="hero" id="inicio" aria-labelledby="hero-title">
+        <div class="hero__media" id="hero-media" data-photo="editorial" aria-hidden="true">
+          <img src="assets/hero-editorial.jpeg" alt="" fetchpriority="high" />
+        </div>
+        <div class="hero__veil"></div>
+        <div class="hero__grain"></div>
+        <div class="hero__flare hero__flare--one"></div>
+        <div class="hero__flare hero__flare--two"></div>
+
+        <svg class="hero__signature" viewBox="0 0 560 350" aria-hidden="true">
+          <path d="M42 274C112 31 391 19 518 151C609 245 402 351 223 313C109 289 49 217 103 144C162 64 333 82 375 169C412 244 305 302 198 263" />
+        </svg>
+
+        <div class="hero__layout">
+          <div class="hero__copy">
+            <p class="hero__eyebrow reveal" data-copy="kicker">IVANNA SALDAÑA MAKEUP ARTIST · BOLIVIA</p>
+            <h1 class="hero__title reveal reveal--delay-1" id="hero-title">
+              <span data-copy="titleMain"></span>
+              <em data-copy="titleAccent"></em>
+            </h1>
+            <p class="hero__description reveal reveal--delay-2" data-copy="description"></p>
+            <div class="hero__actions reveal reveal--delay-3">
+              <a class="button button--primary" id="primary-cta" href="#subscripciones">
+                <span data-copy="primaryText"></span><span aria-hidden="true">↗</span>
+              </a>
+              <a class="button button--ghost" id="secondary-cta" href="#cursos">
+                <span data-copy="secondaryText"></span><span aria-hidden="true">→</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="announcement" id="announcement" role="region" aria-label="Anuncio destacado" hidden>
+            <a class="announcement__link" id="announcement-link" href="#proximo-curso">
+              <svg class="announcement__ribbon" id="announcement-ribbon" aria-hidden="true">
+                <path id="announcement-band" />
+                <defs id="announcement-paths"></defs>
+                <text id="announcement-measure" visibility="hidden"></text>
+                <g id="announcement-track"></g>
+              </svg>
+              <span class="announcement__message" id="announcement-readable"></span>
+            </a>
+          </div>
+
+          <div class="course-position">
+            <span class="course-anchor" id="proximo-curso" tabindex="-1" aria-label="Próximo curso"></span>
+            <aside class="countdown-card reveal reveal--delay-4" id="countdown-card" aria-labelledby="countdown-title">
+            <div class="countdown-card__topline">
+              <span class="pulse" aria-hidden="true"></span>
+              <span data-copy="countdownLabel">PRÓXIMO CURSO</span>
+              <span class="countdown-card__date" id="countdown-date"></span>
+            </div>
+            <p class="countdown-card__overline" data-copy="countdownOverline">MASTERCLASS EN VIVO</p>
+            <h2 id="countdown-title" data-copy="countdownTitle"></h2>
+            <p class="countdown-card__subtitle" id="countdown-subtitle" data-copy="countdownSubtitle"></p>
+            <div class="countdown" id="countdown" aria-hidden="true">
+              <div class="countdown__unit"><strong id="days">00</strong><span data-copy="countdownDays">DÍAS</span></div>
+              <i>:</i>
+              <div class="countdown__unit"><strong id="hours">00</strong><span data-copy="countdownHours">HORAS</span></div>
+              <i>:</i>
+              <div class="countdown__unit"><strong id="minutes">00</strong><span data-copy="countdownMinutes">MIN</span></div>
+              <i>:</i>
+              <div class="countdown__unit"><strong id="seconds">00</strong><span data-copy="countdownSeconds">SEG</span></div>
+            </div>
+            <p class="sr-only" id="countdown-live" aria-live="polite" aria-atomic="true"></p>
+            <div class="countdown-card__footer">
+              <span id="countdown-timezone">HORA BOLIVIA · GMT−4</span>
+              <a id="countdown-cta" href="#subscripciones"><span data-copy="countdownButtonText">Reservar mi lugar</span><span aria-hidden="true">↗</span></a>
+            </div>
+            </aside>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="subscriptions" id="subscripciones" aria-labelledby="subscriptions-title">
+        <header class="subscriptions__intro">
+          <h2 id="subscriptions-title" data-copy="subscriptionsTitle">Subscripciones</h2>
+          <p data-copy="subscriptionsCopy"></p>
+        </header>
+        <div class="subscriptions__plans" id="subscription-plans">
+          <article class="subscription-live" id="subscription-live" aria-labelledby="subscription-live-title" hidden>
+            <div class="subscription-live__cover">
+              <img src="assets/hero-purple.jpeg" alt="" loading="lazy" decoding="async" />
+              <span class="subscription-live__badge" data-copy="subscriptionLiveBadge">EN VIVO</span>
+              <h3 id="subscription-live-title" data-copy="countdownTitle"></h3>
+            </div>
+            <div class="subscription-live__info">
+              <div class="subscription-live__schedule">
+                <time id="subscription-live-date"></time>
+                <span id="subscription-live-zone"></span>
+              </div>
+              <p class="subscription-live__description" data-copy="countdownSubtitle"></p>
+              <p class="subscription-plan__price" data-purchase-price="live" hidden></p>
+            </div>
+            <a class="subscription-plan__action subscription-live__action" id="subscription-live-action" href="#comunidad">Inscribirme</a>
+          </article>
+        </div>
+        <div class="subscriptions__navigation" id="subscription-navigation" role="group" aria-label="Navegar por las tarjetas de Subscripciones" hidden>
+          <button type="button" data-subscription-step="-1" aria-label="Tarjetas anteriores" aria-controls="subscription-plans"><span aria-hidden="true">←</span></button>
+          <button type="button" data-subscription-step="1" aria-label="Tarjetas siguientes" aria-controls="subscription-plans"><span aria-hidden="true">→</span></button>
+        </div>
+        <button class="subscriptions__reset" id="subscription-reset" type="button" hidden>Restablecer color de las fotos</button>
+        <a class="content-link" id="subscriptions-cta" href="#cursos"><span data-copy="subscriptionsCta">Explorar formación</span> <span aria-hidden="true">↗</span></a>
+      </section>
+
+      <section class="community" id="comunidad" aria-labelledby="community-title">
+        <div class="community__inner">
+          <div class="community__intro">
+            <h2 id="community-title"><span data-copy="communityTitle">Forma parte de</span> <em data-copy="communityAccent">la comunidad.</em></h2>
+            <p id="community-register-copy" data-copy="communityCopy">Crea tu cuenta para apuntarte a los cursos y tener tus inscripciones y lecciones en un mismo lugar.</p>
+            <p id="community-member-copy" data-copy="communityMemberCopy" hidden>Consulta tus inscripciones y lecciones en Mi espacio.</p>
+          </div>
+          <div class="community__panel">
+            <form class="community__form" id="community-form" method="post" action="/api/academy/register">
+              <label class="community__wide">
+                <span data-copy="communityNameLabel">Nombre</span>
+                <input name="name" autocomplete="name" maxlength="100" required />
+              </label>
+              <label>
+                <span data-copy="communityCountryLabel">País</span>
+                <select name="country" autocomplete="country" required>
+                  <option value="BO" selected>Bolivia</option>
+                </select>
+              </label>
+              <label id="community-department-field">
+                <span data-copy="communityDepartmentLabel">Departamento</span>
+                <select name="department" required>
+                  <option value="" data-copy="communityDepartmentPlaceholder">Elige tu departamento</option>
+                </select>
+              </label>
+              <label id="community-city-field" hidden>
+                <span data-copy="communityCityLabel">Ciudad</span>
+                <select name="city" required disabled>
+                  <option value="" data-copy="communityCityPlaceholder">Elige tu ciudad</option>
+                  <option value="__other__" data-copy="communityOtherCityOption">Otra ciudad</option>
+                </select>
+              </label>
+              <label class="community__wide" id="community-other-city" hidden>
+                <span data-copy="communityOtherCityLabel">Escribe tu ciudad</span>
+                <input name="otherCity" autocomplete="address-level2" maxlength="100" disabled />
+              </label>
+              <label>
+                <span data-copy="communityAgeLabel">Edad</span>
+                <input name="age" type="number" inputmode="numeric" min="1" max="120" step="1" required />
+              </label>
+              <label>
+                <span id="community-phone-label" data-copy="communityWhatsAppLabel">WhatsApp</span>
+                <span class="community__phone">
+                  <span id="community-phone-prefix">+591</span>
+                  <input name="whatsapp" type="tel" autocomplete="tel-national" maxlength="24" aria-labelledby="community-phone-label" aria-describedby="community-phone-prefix community-phone-help" required />
+                </span>
+                <small id="community-phone-help" data-copy="communityPhoneHelp">Escribe el número local. El prefijo se agrega automáticamente.</small>
+              </label>
+              <label class="community__wide">
+                <span data-copy="communityInterestLabel">¿Qué te interesa aprender?</span>
+                <select name="interest" required>
+                  <option value="" data-copy="communityInterestPlaceholder">Elige una opción</option>
+                </select>
+              </label>
+              <label>
+                <span data-copy="communityEmailLabel">Correo electrónico</span>
+                <input name="email" type="email" autocomplete="username" maxlength="160" required />
+              </label>
+              <div class="community__password">
+                <label for="community-password" data-copy="communityPasswordLabel">Contraseña</label>
+                <div class="community__password-field">
+                  <input id="community-password" name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" aria-describedby="community-password-help" required />
+                  <button class="community__password-toggle" id="community-password-toggle" type="button" aria-controls="community-password" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+                      <circle cx="12" cy="12" r="2.5" />
+                      <path class="community__password-slash" d="m3 3 18 18" />
+                    </svg>
+                    <span class="sr-only" data-copy="communityShowPassword">Mostrar contraseña</span>
+                  </button>
+                </div>
+                <small id="community-password-help" data-copy="communityPasswordHelp">Usa al menos 10 caracteres.</small>
+              </div>
+              <label class="community__wide" id="community-referral-field" hidden>
+                <span data-copy="communityReferralLabel">Código de invitación (opcional)</span>
+                <input name="referralCode" type="text" maxlength="24" autocapitalize="characters" spellcheck="false" disabled />
+              </label>
+              <label class="community__wide community__consent">
+                <input name="whatsappConsent" type="checkbox" />
+                <span data-copy="communityConsent">Autorizo a Ivanna Saldaña a contactarme por WhatsApp sobre sus cursos (opcional).</span>
+              </label>
+              <div class="community__actions">
+                <button class="community__submit" type="submit"><span data-copy="communitySubmit">Unirme a la comunidad</span><span aria-hidden="true">↗</span></button>
+                <a class="community__login" id="academy-home-link" href="/mi-espacio" aria-haspopup="dialog"><span data-copy="academyCta">Ya tengo cuenta</span> <span aria-hidden="true">↗</span></a>
+              </div>
+              <p class="community__feedback" id="community-feedback" role="status" aria-live="polite"></p>
+            </form>
+            <div class="community__member" id="community-member" hidden>
+              <h3><span data-copy="communityGreeting">Hola,</span> <span id="community-member-name"></span></h3>
+              <a class="community__submit" href="/mi-espacio"><span data-copy="communityMemberLink">Ir a mis cursos</span><span aria-hidden="true">↗</span></a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="social-clips" id="clips" aria-labelledby="social-clips-title" hidden>
+        <h2 id="social-clips-title" data-copy="socialClipsTitle">Clips de redes</h2>
+        <div class="social-clips__rail" id="social-clips-rail">
+          <div class="social-clips__viewport" id="social-clips-viewport">
+            <div class="social-clips__track" id="social-clips-track"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="about" id="quien-soy" aria-labelledby="about-title">
+        <figure class="about__portrait" id="about-photo"></figure>
+        <div class="about__copy">
+          <h2 id="about-title" data-copy="aboutTitle">Quién soy</h2>
+          <p class="about__name" data-copy="aboutName">Ivanna Saldaña</p>
+          <p data-copy="aboutCopy">Mi trabajo en maquillaje va de la belleza editorial al body paint. En mis cursos comparto las técnicas de color, composición y ejecución que uso para llevar una idea de la primera prueba al look final.</p>
+        </div>
+      </section>
+
+      <section class="courses" id="cursos" aria-labelledby="courses-title">
+        <div class="courses__intro">
+          <h2 id="courses-title" data-copy="coursesTitle">Cursos</h2>
+          <p data-copy="coursesCopy">Conoce las técnicas que trabajo en mis cursos, desde el maquillaje editorial hasta el diseño de personajes y el body paint.</p>
+          <a class="content-link" id="next-course-link" href="#subscripciones"><span data-copy="coursesCta">Ver próximo curso</span> <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="portfolio" id="portfolio"></div>
+      </section>
+
+      <section class="reviews" id="resenas" aria-labelledby="reviews-title">
+        <header class="reviews__intro">
+          <h2 id="reviews-title" data-copy="reviewsTitle">Reseñas de los cursos</h2>
+          <p data-copy="reviewsCopy">Lee lo que comparten quienes ya completaron un curso.</p>
+        </header>
+        <p class="reviews__empty" id="reviews-empty" data-copy="reviewsEmpty" hidden>Todavía no hay reseñas publicadas.</p>
+        <ul class="reviews__grid" id="reviews-list"></ul>
+        <button class="reviews__more" id="reviews-more" type="button" data-copy="reviewsMore" hidden>Ver más reseñas</button>
+        <p class="reviews__feedback" id="reviews-feedback" role="status"></p>
+      </section>
+      <section class="ranking-section ranking-section--home" id="podio" aria-labelledby="ranking-title" data-ranking>
+        <header class="ranking-heading">
+          <h2 id="ranking-title" data-copy="rankingTitle">Podio de participantes</h2>
+          <p data-copy="rankingCopy">Las cinco personas con más actividad en los cursos y la comunidad.</p>
+          <span class="ranking-sample" data-copy="rankingSampleLabel" hidden>Podio de ejemplo</span>
+        </header>
+        <ol class="ranking-list" role="list"></ol>
+        <p class="ranking-error" role="status"></p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <strong data-copy="footerName">IVANNA SALDAÑA</strong>
+        <span data-copy="footerSubtitle">Makeup Artist · Bolivia</span>
+        <a href="/mi-espacio#feed" data-copy="footerCommunityLabel">Comunidad</a>
+      </div>
+      <a class="admin-lock" id="admin-lock" href="/admin" aria-label="Acceso de administración" title="Acceso de administración">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="18" height="12" x="3" y="9" rx="2"></rect>
+          <path d="M7 9V6a5 5 0 0 1 10 0v3"></path>
+          <circle cx="12" cy="15" r="1"></circle>
+        </svg>
+      </a>
+    </footer>
+
+    <a class="whatsapp-float" id="whatsapp-contact" target="_blank" rel="noopener noreferrer" aria-label="Escríbenos por WhatsApp" title="Escríbenos por WhatsApp" hidden>
+      <svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 175.216 175.552"><defs><linearGradient id="wa-logo-green" x1="85.915" x2="86.535" y1="32.567" y2="137.092" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#57d163"/><stop offset="1" stop-color="#23b33a"/></linearGradient><filter id="wa-logo-shadow" width="1.115" height="1.114" x="-.057" y="-.057" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3.531"/></filter></defs><path fill="#b3b3b3" d="m54.532 138.45 2.235 1.324c9.387 5.571 20.15 8.518 31.126 8.523h.023c33.707 0 61.139-27.426 61.153-61.135.006-16.335-6.349-31.696-17.895-43.251A60.75 60.75 0 0 0 87.94 25.983c-33.733 0-61.166 27.423-61.178 61.13a60.98 60.98 0 0 0 9.349 32.535l1.455 2.312-6.179 22.558zm-40.811 23.544L24.16 123.88c-6.438-11.154-9.825-23.808-9.821-36.772.017-40.556 33.021-73.55 73.578-73.55 19.681.01 38.154 7.669 52.047 21.572s21.537 32.383 21.53 52.037c-.018 40.553-33.027 73.553-73.578 73.553h-.032c-12.313-.005-24.412-3.094-35.159-8.954zm0 0" filter="url(#wa-logo-shadow)"/><path fill="#fff" d="m12.966 161.238 10.439-38.114a73.42 73.42 0 0 1-9.821-36.772c.017-40.556 33.021-73.55 73.578-73.55 19.681.01 38.154 7.669 52.047 21.572s21.537 32.383 21.53 52.037c-.018 40.553-33.027 73.553-73.578 73.553h-.032c-12.313-.005-24.412-3.094-35.159-8.954z"/><path fill="url(#linearGradient1780)" d="M87.184 25.227c-33.733 0-61.166 27.423-61.178 61.13a60.98 60.98 0 0 0 9.349 32.535l1.455 2.312-6.179 22.559 23.146-6.069 2.235 1.324c9.387 5.571 20.15 8.518 31.126 8.524h.023c33.707 0 61.14-27.426 61.153-61.135a60.75 60.75 0 0 0-17.895-43.251 60.75 60.75 0 0 0-43.235-17.929z"/><path fill="url(#wa-logo-green)" d="M87.184 25.227c-33.733 0-61.166 27.423-61.178 61.13a60.98 60.98 0 0 0 9.349 32.535l1.455 2.313-6.179 22.558 23.146-6.069 2.235 1.324c9.387 5.571 20.15 8.517 31.126 8.523h.023c33.707 0 61.14-27.426 61.153-61.135a60.75 60.75 0 0 0-17.895-43.251 60.75 60.75 0 0 0-43.235-17.928z"/><path fill="#fff" fill-rule="evenodd" d="M68.772 55.603c-1.378-3.061-2.828-3.123-4.137-3.176l-3.524-.043c-1.226 0-3.218.46-4.902 2.3s-6.435 6.287-6.435 15.332 6.588 17.785 7.506 19.013 12.718 20.381 31.405 27.75c15.529 6.124 18.689 4.906 22.061 4.6s10.877-4.447 12.408-8.74 1.532-7.971 1.073-8.74-1.685-1.226-3.525-2.146-10.877-5.367-12.562-5.981-2.91-.919-4.137.921-4.746 5.979-5.819 7.206-2.144 1.381-3.984.462-7.76-2.861-14.784-9.124c-5.465-4.873-9.154-10.891-10.228-12.73s-.114-2.835.808-3.751c.825-.824 1.838-2.147 2.759-3.22s1.224-1.84 1.836-3.065.307-2.301-.153-3.22-4.032-10.011-5.666-13.647"/></svg>
+    </a>
+
+    <a class="preview-flag" id="preview-flag" href="/admin/dashboard">Borrador · Volver al panel</a>
+
+    <script src="home-config.js" defer></script>
+    <script src="social-clips.js" defer></script>
+    <script src="academy-payment.js" defer></script>
+    <script src="profile.js" defer></script>
+    <script src="/app-notifications.js" defer></script>
+    <script src="/academy-ranking.js" defer></script>
+    <script src="app.js" defer></script>
+    <script src="navigation.js" defer></script>
+  </body>
+</html>

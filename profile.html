@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#13080f" />
+    <title>Perfil · Ivanna Saldaña</title>
+    <link rel="icon" href="/favicon.ico?v=6ccb322a" sizes="16x16 32x32 48x48" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/app-192.png" />
+    <link rel="stylesheet" href="/admin.css" />
+    <link rel="stylesheet" href="/academy.css" />
+    <link rel="stylesheet" href="/profile.css" />
+    <script src="/profile.js" defer></script>
+  </head>
+  <body class="academy-page">
+    <header class="academy-header">
+      <a class="wordmark" href="/">
+        <span class="wordmark__logo" aria-hidden="true"><img src="/assets/logo-iv.png" alt="" /></span>
+        <span class="wordmark__name">Ivanna Saldaña <small>Makeup Artist</small></span>
+      </a>
+      <a class="back-link" href="/#resenas">Volver a reseñas</a>
+    </header>
+    <main class="academy-main public-profile">
+      <p id="public-profile-status" role="status">Cargando el perfil…</p>
+      <section class="academy-panel public-profile__card" id="public-profile-content" aria-labelledby="public-profile-name" hidden>
+        <div class="public-profile__portrait">
+          <img class="profile-avatar public-profile__avatar" id="public-profile-avatar" src="/assets/avatar-generico.svg" alt="" />
+        </div>
+        <div class="public-profile__identity">
+          <p id="public-profile-example" class="public-profile__example" hidden>Perfil de ejemplo</p>
+          <h1 id="public-profile-name"></h1>
+          <p id="public-profile-specialty" class="public-profile__specialty" hidden></p>
+          <div id="public-profile-socials"></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
